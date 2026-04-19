@@ -1,4 +1,5 @@
 import DashboardScreen from './DashboardScreen'
+import ScheduleScreen from './ScheduleScreen'
 import AppShell from './components/AppShell'
 import { useState, useRef } from 'react'
 
@@ -18,12 +19,10 @@ function Icon({ name, fill = false, className = '', style = {} }) {
 function AppHeader({ screen, onNavigate }) {
   if (screen === 'onboarding') return null
 
-  const isDefense = screen === 'defense'
-
   return (
     <header
       style={{
-        background: isDefense ? 'rgba(248,250,252,0.92)' : 'rgba(10,13,16,0.85)',
+        background: 'rgba(10,13,16,0.85)',
         backdropFilter: 'blur(20px)',
         position: 'fixed', top: 0, width: '100%', zIndex: 50,
         borderBottom: '1px solid var(--color-border-subtle)',
@@ -32,31 +31,18 @@ function AppHeader({ screen, onNavigate }) {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0 20px', height:64, maxWidth:672, margin:'0 auto' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }} onClick={() => onNavigate('dashboard')}>
           <span style={{ fontFamily:'var(--font-display)', fontSize:14, fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' }}>
-            <span style={{ color: isDefense ? '#0f172a' : 'var(--color-text-primary)' }}>Family </span>
+            <span style={{ color: 'var(--color-text-primary)' }}>Family </span>
             <span style={{ color: 'var(--color-accent)' }}>Garage</span>
           </span>
         </div>
-        <HeaderActions screen={screen} onNavigate={onNavigate} />
+        {screen === 'dashboard' && (
+          <div style={{ width:32, height:32, borderRadius:'50%', border:'1px solid var(--color-border-subtle)', background:'var(--color-bg-surface)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+            <Icon name="person" style={{ color:'var(--color-text-secondary)', fontSize:17 }} />
+          </div>
+        )}
       </div>
     </header>
   )
-}
-
-function HeaderActions({ screen, onNavigate }) {
-  if (screen === 'dashboard') {
-    return (
-      <div style={{ width:32, height:32, borderRadius:'50%', border:'1px solid var(--color-border-subtle)', background:'var(--color-bg-surface)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-        <Icon name="person" style={{ color:'var(--color-text-secondary)', fontSize:17 }} />
-      </div>
-    )
-  }
-  if (screen === 'import') {
-    return <button onClick={() => onNavigate('schedule')} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--color-accent)', fontFamily:'var(--font-body)', fontSize:12, fontWeight:600 }}>History</button>
-  }
-  if (screen === 'defense') {
-    return <button onClick={() => onNavigate('dashboard')} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontFamily:'var(--font-body)', fontSize:12, fontWeight:600 }}>Close</button>
-  }
-  return null
 }
 
 function BottomNav({ screen, onNavigate }) {
@@ -82,7 +68,6 @@ function BottomNav({ screen, onNavigate }) {
   )
 }
 
-const contentArea = { padding:'88px 20px 100px', maxWidth:672, margin:'0 auto' }
 const slab = { fontFamily:'"Space Grotesk"', fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.25em', color:'#f97316' }
 const stitle = { fontFamily:'"Space Grotesk"', fontWeight:800, color:'#f8fafc', textTransform:'uppercase', letterSpacing:'-0.02em', fontStyle:'italic' }
 
@@ -94,7 +79,7 @@ function BtnPrimary({ children, onClick, style = {} }) {
   )
 }
 
-// ─── Screen 1: Onboarding ────────────────────────────────────
+// ─── Screen 1: Onboarding (keep old styling for now) ─────────
 
 function OnboardingScreen({ onComplete, onSkip }) {
   const [year, setYear] = useState('2021')
@@ -160,10 +145,6 @@ function OnboardingScreen({ onComplete, onSkip }) {
             <input style={inputStyle} type="text" placeholder="HIGHLANDER" value={model} onChange={e => setModel(e.target.value)} />
           </div>
           <div>
-            <label style={labelStyle}>Trim <span style={{ color:'#334155', fontWeight:400 }}>(optional)</span></label>
-            <input style={inputStyle} type="text" placeholder="XLE AWD" />
-          </div>
-          <div>
             <label style={labelStyle}>Current Mileage</label>
             <div style={{ background:'rgba(15,23,42,0.5)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'1rem', display:'flex', alignItems:'center', gap:10 }}>
               <div style={{ padding:'1rem', display:'flex', alignItems:'center', gap:10, flex:1 }}>
@@ -171,16 +152,6 @@ function OnboardingScreen({ onComplete, onSkip }) {
                 <input style={{ background:'transparent', border:'none', color:'#f8fafc', fontFamily:'Manrope', fontWeight:600, width:'100%', outline:'none', fontSize:'1rem' }} type="text" inputMode="numeric" placeholder="42,000" value={miles} onChange={e => setMiles(e.target.value)} />
               </div>
               <span style={{ paddingRight:14, fontFamily:'"Space Grotesk"', fontSize:10, fontWeight:700, color:'#334155', textTransform:'uppercase', letterSpacing:'0.15em' }}>mi</span>
-            </div>
-          </div>
-
-          <div style={{ display:'flex', alignItems:'center', gap:14, padding:14, background:'rgba(249,115,22,0.05)', border:'1px solid rgba(255,255,255,0.04)', borderRadius:'1rem' }}>
-            <div style={{ width:44, height:44, borderRadius:12, background:'rgba(249,115,22,0.15)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <Icon name="verified_user" style={{ color:'#f97316' }} />
-            </div>
-            <div>
-              <p style={{ fontFamily:'"Space Grotesk"', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', margin:'0 0 2px' }}>Secure & Local</p>
-              <p style={{ fontSize:11, color:'#64748b', margin:0 }}>Your data is stored privately on this device.</p>
             </div>
           </div>
 
@@ -198,60 +169,7 @@ function OnboardingScreen({ onComplete, onSkip }) {
   )
 }
 
-// ─── Screen 3: Schedule (unmigrated) ─────────────────────────
-
-function ScheduleScreen({ vehicles, activeVehicle, onNavigate }) {
-  const [tab, setTab] = useState('due')
-  const v = vehicles[activeVehicle]
-
-  const dueItems = [
-    { icon:'oil_barrel',  name:'Oil & Filter Change',     interval:'Every 5,000 miles', due:'IN 800 MI',   when:'DEC 2024' },
-    { icon:'tire_repair', name:'Tire Rotation & Balance', interval:'Every 6,000 miles', due:'IN 1,240 MI', when:'JAN 2025' },
-    { icon:'water_drop',  name:'Brake Fluid Flush',       interval:'Every 30,000 miles',due:'IN 2,500 MI', when:'MAR 2025' },
-    { icon:'straighten',  name:'Wheel Alignment Check',   interval:'Annual',             due:'IN 3,800 MI', when:'APR 2025' },
-  ]
-
-  return (
-    <div className="animate-page-in" style={{ paddingTop: 88, paddingBottom: 100, paddingLeft: 20, paddingRight: 20 }}>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ ...stitle, fontSize:'1.75rem', lineHeight:1, margin:'0 0 4px' }}>{v.name}</h2>
-        <p style={{ fontSize:12, color:'#475569', margin:0 }}>Last synced: Today, 9:42 AM · {v.milesRaw.toLocaleString()} mi</p>
-      </div>
-
-      <div style={{ background:'rgba(15,23,42,0.5)', border:'1px solid #1e293b', borderRadius:12, display:'flex', gap:4, padding:4, marginBottom:22 }}>
-        {['due','overdue','history'].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ flex:1, padding:10, borderRadius:8, fontFamily:'"Space Grotesk"', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.1em', cursor:'pointer', border:'none', background: tab===t ? '#ea580c' : 'transparent', color: tab===t ? 'white' : '#475569', transition:'all 0.2s' }}>
-            {t === 'due' ? 'Due Soon' : t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'due' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {dueItems.map((item, i) => (
-            <div key={i} style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius:'1rem', padding:16, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                <div style={{ width:44, height:44, background:'#1e293b', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <Icon name={item.icon} style={{ color:'#f97316' }} />
-                </div>
-                <div>
-                  <p style={{ fontFamily:'Manrope', fontWeight:800, fontSize:13, textTransform:'uppercase', margin:'0 0 3px' }}>{item.name}</p>
-                  <p style={{ fontSize:10, color:'#475569', margin:0 }}>{item.interval}</p>
-                </div>
-              </div>
-              <div style={{ textAlign:'right' }}>
-                <p style={{ fontFamily:'"Space Grotesk"', fontWeight:800, color:'#f97316', fontSize:12, margin:0 }}>{item.due}</p>
-                <p style={{ fontSize:9, color:'#475569', margin:0 }}>{item.when}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Screen 4: Import (unmigrated) ───────────────────────────
+// ─── Screen 4: Import (simplified stub for now) ──────────────
 
 function ImportScreen({ onFinalize }) {
   const [parseState, setParseState] = useState('idle')
@@ -269,18 +187,10 @@ function ImportScreen({ onFinalize }) {
   function handleFileSelected(input) {
     if (!input.files || !input.files[0]) return
     const file = input.files[0]
-    if (file.size > 10 * 1024 * 1024) {
-      alert('File is too large. Please choose a file under 10MB.')
-      input.value = ''
-      return
-    }
+    if (file.size > 10 * 1024 * 1024) return alert('Too large.')
     const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
     const isImage = file.type.startsWith('image/')
-    if (!isPDF && !isImage) {
-      alert('Please choose an image (JPEG, PNG) or PDF file.')
-      input.value = ''
-      return
-    }
+    if (!isPDF && !isImage) return alert('Choose an image or PDF.')
     setParseState('selected')
     setParsedData({ file, isPDF, isImage, previewUrl: isImage ? URL.createObjectURL(file) : null })
   }
@@ -288,7 +198,6 @@ function ImportScreen({ onFinalize }) {
   async function startParsing() {
     if (!parsedData?.file) return
     setParseState('parsing')
-    setErrorMsg('')
     try {
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -307,7 +216,7 @@ function ImportScreen({ onFinalize }) {
             role: 'user',
             content: [
               { type: parsedData.isPDF ? 'document' : 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-              { type: 'text', text: `Parse this vehicle service receipt. Respond ONLY with valid JSON: {"service_type": "...", "shop_name": "...", "date": "...", "mileage": "...", "cost": "...", "line_items": [], "notes": "..."}. Use null for missing fields.` },
+              { type: 'text', text: `Parse this vehicle service receipt. Respond ONLY with JSON: {"service_type": "...", "shop_name": "...", "date": "...", "mileage": "...", "cost": "...", "line_items": [], "notes": "..."}. Use null for missing.` },
             ],
           }],
         }),
@@ -326,22 +235,17 @@ function ImportScreen({ onFinalize }) {
 
   return (
     <div className="animate-page-in" style={{ paddingTop: 88, paddingBottom: 100, paddingLeft: 20, paddingRight: 20 }}>
-      <div style={{ marginBottom:24 }}>
-        <h2 style={{ ...stitle, fontSize:'2rem', lineHeight:1, margin:'0 0 8px' }}>Import Record</h2>
-        <p style={{ fontSize:13, color:'#94a3b8', margin:0 }}>Snap a photo of your receipt and let AI handle the data entry.</p>
-      </div>
-
+      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', fontWeight: 600, margin: '0 0 24px' }}>Import record</h2>
       <input ref={fileRef} type="file" accept="image/*,.pdf" style={{ display:'none' }} onChange={e => handleFileSelected(e.target)} />
-
       {(parseState === 'idle' || parseState === 'selected') && (
-        <div onClick={() => parseState === 'idle' && fileRef.current?.click()} style={{ aspectRatio:'4/3', borderRadius:'1.5rem', background: 'var(--color-bg-surface)', border: `2px dashed ${parseState === 'selected' ? 'var(--color-accent)' : 'var(--color-border-default)'}`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, cursor: parseState === 'idle' ? 'pointer' : 'default' }}>
+        <div onClick={() => parseState === 'idle' && fileRef.current?.click()} style={{ aspectRatio:'4/3', borderRadius:'var(--radius-lg)', background: 'var(--color-bg-surface)', border: `2px dashed ${parseState === 'selected' ? 'var(--color-accent)' : 'var(--color-border-default)'}`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, cursor: parseState === 'idle' ? 'pointer' : 'default' }}>
           {parseState === 'idle' ? (
             <>
               <div style={{ width:56, height:56, borderRadius:'50%', background:'var(--color-accent-bg)', display:'flex', alignItems:'center', justifyContent:'center' }}>
                 <Icon name="add_a_photo" style={{ color:'var(--color-accent)', fontSize:26 }} />
               </div>
               <div style={{ textAlign:'center' }}>
-                <p style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:16, margin:'0 0 4px' }}>Upload Receipt</p>
+                <p style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:16, margin:'0 0 4px' }}>Upload receipt</p>
                 <p style={{ fontSize:11, color:'var(--color-text-tertiary)', margin:0 }}>JPEG, PNG or PDF · up to 10MB</p>
               </div>
             </>
@@ -352,26 +256,25 @@ function ImportScreen({ onFinalize }) {
           )}
         </div>
       )}
-
       {parseState === 'parsing' && <p style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: 40 }}>Parsing receipt...</p>}
       {parseState === 'error' && <p style={{ color: 'var(--color-status-danger)', padding: 20 }}>Error: {errorMsg} <button onClick={resetUpload}>Try again</button></p>}
       {parseState === 'done' && parsedData && (
-        <div>
+        <div style={{ marginTop: 16 }}>
           <p style={{ color: 'var(--color-text-primary)', marginBottom: 16 }}>Parsed: {parsedData.service_type} — ${parsedData.cost}</p>
-          <BtnPrimary onClick={() => onFinalize(parsedData)}>Save to Service History</BtnPrimary>
+          <button onClick={() => onFinalize(parsedData)} style={{ background:'var(--color-accent)', color:'var(--color-text-inverse)', padding:'12px 24px', borderRadius:12, fontWeight:600, fontSize:13, border:'none', cursor:'pointer', width: '100%' }}>Save to Service History</button>
         </div>
       )}
     </div>
   )
 }
 
-// ─── Screen 5: Defense Report (unmigrated) ───────────────────
+// ─── Screen 5: Defense Report (stub) ─────────────────────────
 
 function DefenseScreen({ onNavigate }) {
   return (
     <div className="animate-page-in" style={{ paddingTop: 88, paddingBottom: 100, paddingLeft: 20, paddingRight: 20 }}>
-      <h2 style={{ ...stitle, fontSize:'1.75rem', margin:'0 0 16px' }}>Defense Report</h2>
-      <p style={{ color: 'var(--color-text-secondary)' }}>Defense report screen — still uses old styling. Will be migrated in the next pass.</p>
+      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', fontWeight: 600, margin:'0 0 16px' }}>Defense Report</h2>
+      <p style={{ color: 'var(--color-text-secondary)' }}>Defense report screen — still needs migration.</p>
     </div>
   )
 }
@@ -422,7 +325,12 @@ export default function App() {
         />
       )}
       {screen === 'schedule' && (
-        <ScheduleScreen vehicles={vehicles} activeVehicle={activeVehicle} onNavigate={navigate} />
+        <ScheduleScreen
+          vehicles={vehicles}
+          activeVehicle={activeVehicle}
+          onNavigate={navigate}
+          serviceRecords={serviceRecords}
+        />
       )}
       {screen === 'import' && (
         <ImportScreen onFinalize={handleFinalizeRecord} />
