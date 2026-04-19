@@ -1,45 +1,61 @@
 /**
- * DashboardScreen — Design refresh
- * ---------------------------------
- * Migrated from inline orange hex values to CSS custom properties (tokens).
- * New structure:
- *   1. FleetChipStrip (horizontal vehicle switcher) — replaces the "Switch/Add" buttons
- *   2. Odometer hero — tabular mono numeric readout
- *   3. Conditional recall alert
- *   4. MileageTape — replaces the bento-grid cards
- *   5. Stats row (empty-state-aware)
- *   6. Recent Activity or empty state
- *   7. Import CTA
+ * DashboardScreen — responsive single-column
+ * -------------------------------------------
+ * Works inside AppShell's content area.
+ * On mobile: FleetChipStrip shows at the top (sidebar doesn't exist).
+ * On desktop: FleetChipStrip is hidden (sidebar has fleet chips).
  *
- * Drop this into your App.jsx, replacing the existing DashboardScreen function.
- * You'll also need to import FleetChipStrip and MileageTape at the top.
+ * The content flows top-to-bottom in a single column at all widths,
+ * matching the Notion-style narrow-column pattern.
  */
 
+import { useEffect, useState } from 'react'
 import FleetChipStrip from './components/FleetChipStrip'
 import MileageTape from './components/MileageTape'
 
-// NOTE: Icon, BtnPrimary, slab, stitle are still used from the parent file.
-// This file assumes they're in scope (keep them in App.jsx as-is).
+// Local Icon component — renders Material Symbols
+function Icon({ name, fill = false, className = '', style = {} }) {
+  return (
+    <span
+      className={`msym ${fill ? 'msym-fill' : ''} ${className}`}
+      style={style}
+    >
+      {name}
+    </span>
+  )
+}
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : false
+  )
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 768px)')
+    const handler = (e) => setIsDesktop(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
+  return isDesktop
+}
 
 function DashboardScreen({
   vehicles,
   activeVehicle,
-  onSwitchVehicle,   // kept for backward compat, no longer used
+  onSwitchVehicle,
   onNavigate,
   serviceRecords = [],
 }) {
   const v = vehicles[activeVehicle]
   const hasRecords = serviceRecords.length > 0
+  const isDesktop = useIsDesktop()
 
-  // Adapt vehicles to FleetChipStrip's expected shape
   const fleetVehicles = vehicles.map((vehicle, i) => ({
     id: String(i),
     nickname: extractNickname(vehicle.name),
     year: extractYear(vehicle.name),
-    healthScore: 85, // TODO: compute from service history
+    healthScore: 85,
   }))
 
-  // Mock upcoming services for the MileageTape — wire to real data later
   const upcomingServices = [
     { id: 'oil',   label: 'Oil',         mileage: v.milesRaw + 800,   priority: 'normal' },
     { id: 'rot',   label: 'Rotate',      mileage: v.milesRaw + 2500,  priority: 'warning' },
@@ -52,18 +68,23 @@ function DashboardScreen({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 'var(--space-5)',
-        padding: '88px var(--space-5) 100px',
+        gap: 'var(--space-4)',
+        paddingTop: isDesktop ? 0 : 88,
+        paddingBottom: isDesktop ? 40 : 100,
+        paddingLeft: isDesktop ? 0 : 'var(--space-5)',
+        paddingRight: isDesktop ? 0 : 'var(--space-5)',
       }}
     >
-      {/* 1. Fleet chip strip — always present, "fleet-first" concept */}
-      <FleetChipStrip
-        vehicles={fleetVehicles}
-        activeId={String(activeVehicle)}
-        onSelect={(id) => onSwitchVehicle(parseInt(id))}
-      />
+      {/* Fleet chip strip — mobile only (sidebar handles it on desktop) */}
+      {!isDesktop && (
+        <FleetChipStrip
+          vehicles={fleetVehicles}
+          activeId={String(activeVehicle)}
+          onSelect={(id) => onSwitchVehicle(parseInt(id))}
+        />
+      )}
 
-      {/* 2. Odometer hero */}
+      {/* Odometer hero with integrated stat pills */}
       <div
         style={{
           background: 'var(--color-bg-surface)',
@@ -72,7 +93,6 @@ function DashboardScreen({
           padding: 'var(--space-6)',
         }}
       >
-        {/* Live sync indicator */}
         <div
           style={{
             display: 'flex',
@@ -98,7 +118,6 @@ function DashboardScreen({
           </span>
         </div>
 
-        {/* The big number */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)' }}>
           <span className="text-odometer">{v.milesRaw.toLocaleString()}</span>
           <span
@@ -114,7 +133,6 @@ function DashboardScreen({
           </span>
         </div>
 
-        {/* Metadata row */}
         <div
           style={{
             display: 'flex',
@@ -133,8 +151,14 @@ function DashboardScreen({
           )}
         </div>
 
-        {/* Health / recall pills */}
-        <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-4)' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 'var(--space-2)',
+            marginTop: 'var(--space-5)',
+          }}
+        >
           <StatPill label="Health" value="85" suffix="/100" />
           <StatPill
             label="Due soon"
@@ -145,81 +169,76 @@ function DashboardScreen({
         </div>
       </div>
 
-      {/* 3. Conditional recall alert — only when a recall exists */}
+      {/* Recall alert */}
       <div
         style={{
           background: 'var(--color-bg-surface)',
           border: '1px solid rgba(239, 68, 68, 0.3)',
           borderRadius: 'var(--radius-lg)',
-          padding: 'var(--space-5)',
+          padding: 'var(--space-4)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-3)',
         }}
       >
         <div
           style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            padding: 'var(--space-2)',
+            borderRadius: 'var(--radius-md)',
+            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
-            gap: 'var(--space-3)',
-            marginBottom: 'var(--space-4)',
+            justifyContent: 'center',
           }}
         >
-          <div
+          <Icon name="error" fill style={{ color: 'var(--color-status-danger)', fontSize: 22 }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p
             style={{
-              background: 'rgba(239, 68, 68, 0.15)',
-              padding: 'var(--space-2)',
-              borderRadius: 'var(--radius-md)',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              fontFamily: 'var(--font-display)',
+              fontWeight: 600,
+              fontSize: 'var(--text-base)',
+              margin: '0 0 2px',
+              color: 'var(--color-text-primary)',
             }}
           >
-            <Icon name="error" fill style={{ color: 'var(--color-status-danger)', fontSize: 22 }} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <p
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 600,
-                fontSize: 'var(--text-base)',
-                margin: '0 0 2px',
-                color: 'var(--color-text-primary)',
-              }}
-            >
-              Recall Alert: Airbag System
-            </p>
-            <p
-              style={{
-                fontSize: 'var(--text-sm)',
-                color: 'var(--color-text-secondary)',
-                margin: 0,
-              }}
-            >
-              Safety notice for 2018 Honda Odyssey. Schedule immediately.
-            </p>
-          </div>
+            Recall: Airbag system
+          </p>
+          <p
+            style={{
+              fontSize: 'var(--text-sm)',
+              color: 'var(--color-text-secondary)',
+              margin: 0,
+            }}
+          >
+            Safety notice for 2018 Honda Odyssey. Schedule immediately.
+          </p>
         </div>
         <button
           onClick={() => onNavigate('defense')}
           style={{
             background: 'var(--color-status-danger)',
             color: '#fff',
-            padding: 'var(--space-3)',
+            padding: '8px 14px',
             borderRadius: 'var(--radius-md)',
             fontFamily: 'var(--font-body)',
             fontWeight: 600,
-            fontSize: 'var(--text-sm)',
+            fontSize: 'var(--text-xs)',
             textTransform: 'uppercase',
-            letterSpacing: '0.1em',
+            letterSpacing: '0.08em',
             border: 'none',
             cursor: 'pointer',
-            width: '100%',
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
           }}
         >
-          View Defense Report
+          Report
         </button>
       </div>
 
-      {/* 4. Mileage tape — replaces the bento grid */}
+      {/* Mileage tape */}
       <div
         style={{
           background: 'var(--color-bg-surface)',
@@ -234,14 +253,14 @@ function DashboardScreen({
         />
       </div>
 
-      {/* 5. Recent activity — only if records exist */}
+      {/* Recent activity or empty state */}
       {hasRecords ? (
         <RecentActivity records={serviceRecords} onNavigate={onNavigate} />
       ) : (
         <EmptyActivityState onNavigate={onNavigate} />
       )}
 
-      {/* 6. Import CTA */}
+      {/* Import CTA */}
       <button
         onClick={() => onNavigate('import')}
         style={{
@@ -284,8 +303,8 @@ function DashboardScreen({
         </div>
         <div
           style={{
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             borderRadius: 'var(--radius-full)',
             background: 'var(--color-accent)',
             color: 'var(--color-text-inverse)',
@@ -296,7 +315,7 @@ function DashboardScreen({
             flexShrink: 0,
           }}
         >
-          <Icon name="add_a_photo" style={{ fontSize: 22 }} />
+          <Icon name="add_a_photo" style={{ fontSize: 20 }} />
         </div>
       </button>
     </div>
@@ -311,7 +330,6 @@ function StatPill({ label, value, suffix, tone = 'default' }) {
   return (
     <div
       style={{
-        flex: 1,
         background: 'var(--color-bg-inset)',
         border: '1px solid var(--color-border-subtle)',
         borderRadius: 'var(--radius-md)',
@@ -445,8 +463,8 @@ function EmptyActivityState({ onNavigate }) {
     >
       <div
         style={{
-          width: 48,
-          height: 48,
+          width: 44,
+          height: 44,
           borderRadius: 'var(--radius-full)',
           background: 'var(--color-accent-bg)',
           border: '1px solid var(--color-border-accent)',
@@ -456,7 +474,7 @@ function EmptyActivityState({ onNavigate }) {
           margin: '0 auto var(--space-3)',
         }}
       >
-        <Icon name="receipt_long" style={{ color: 'var(--color-accent)', fontSize: 22 }} />
+        <Icon name="receipt_long" style={{ color: 'var(--color-accent)', fontSize: 20 }} />
       </div>
       <p
         style={{
@@ -505,13 +523,11 @@ function EmptyActivityState({ onNavigate }) {
 // ─── Helpers ──────────────────────────────────────────────────
 
 function extractNickname(name) {
-  // "2021 Toyota Highlander" → "Highlander"
   const parts = name.split(' ')
   return parts.length > 2 ? parts.slice(2).join(' ') : name
 }
 
 function extractYear(name) {
-  // "2021 Toyota Highlander" → "'21"
   const match = name.match(/\b(19|20)\d{2}\b/)
   if (!match) return ''
   return `'${match[0].slice(2)}`
