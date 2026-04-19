@@ -1,0 +1,253 @@
+/**
+ * Family Garage — Design Tokens
+ * ---------------------------------
+ * The single source of truth for colors, typography, spacing, and effects.
+ * All components reference these tokens via CSS variables or Tailwind classes.
+ *
+ * Naming convention: category.variant.state (e.g. --color-bg-surface)
+ */
+
+:root {
+  /* ============================================================
+     COLOR — Backgrounds
+     ============================================================ */
+  --color-bg-base: #0a0d10;          /* Page background, near-black with cool tint */
+  --color-bg-surface: #12161a;        /* Cards, elevated panels */
+  --color-bg-elevated: #1a1f24;       /* Higher elevation (modals, active chips) */
+  --color-bg-inset: #070a0c;          /* Recessed areas (inputs, receipt preview) */
+
+  /* ============================================================
+     COLOR — Accent (Cyan)
+     The signature color. Used for primary actions, active states,
+     live indicators, and the "instrument panel" glow aesthetic.
+     ============================================================ */
+  --color-accent: #00d4ff;
+  --color-accent-bright: #33ddff;     /* Hover / highlight */
+  --color-accent-dim: #0099bb;        /* Pressed / subtle */
+  --color-accent-glow: rgba(0, 212, 255, 0.35);
+  --color-accent-glow-soft: rgba(0, 212, 255, 0.15);
+  --color-accent-bg: rgba(0, 212, 255, 0.08);  /* Tinted background for active chips */
+
+  /* ============================================================
+     COLOR — Text
+     ============================================================ */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #8a9199;    /* Labels, secondary info */
+  --color-text-tertiary: #5a6269;     /* Captions, deemphasized */
+  --color-text-accent: var(--color-accent);
+  --color-text-inverse: #0a0d10;      /* On cyan backgrounds */
+
+  /* ============================================================
+     COLOR — Status
+     Preserves hierarchy: warning (due soon), danger (recalls)
+     ============================================================ */
+  --color-status-success: #22c55e;
+  --color-status-warning: #fbbf24;    /* Due soon */
+  --color-status-danger: #ef4444;     /* Open recalls */
+  --color-status-info: var(--color-accent);
+
+  /* ============================================================
+     COLOR — Borders
+     ============================================================ */
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-default: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+  --color-border-accent: rgba(0, 212, 255, 0.4);
+  --color-border-accent-strong: var(--color-accent);
+
+  /* ============================================================
+     TYPOGRAPHY — Families
+     ============================================================ */
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* ============================================================
+     TYPOGRAPHY — Scale
+     ============================================================ */
+  --text-xs: 0.6875rem;    /* 11px — micro labels, chip metadata */
+  --text-sm: 0.8125rem;    /* 13px — secondary body */
+  --text-base: 0.9375rem;  /* 15px — body default */
+  --text-lg: 1.0625rem;    /* 17px — emphasized body */
+  --text-xl: 1.375rem;     /* 22px — section headers */
+  --text-2xl: 1.75rem;     /* 28px — screen titles */
+  --text-3xl: 2.5rem;      /* 40px — feature numerics */
+  --text-odometer: 4.5rem; /* 72px — hero odometer readout */
+
+  /* ============================================================
+     TYPOGRAPHY — Weights
+     ============================================================ */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ============================================================
+     SPACING
+     ============================================================ */
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+
+  /* ============================================================
+     RADII
+     ============================================================ */
+  --radius-sm: 0.375rem;  /* 6px — chips */
+  --radius-md: 0.625rem;  /* 10px — buttons */
+  --radius-lg: 1rem;      /* 16px — cards */
+  --radius-xl: 1.5rem;    /* 24px — major panels */
+  --radius-full: 9999px;
+
+  /* ============================================================
+     EFFECTS — Shadows & Glows
+     The cyan glow is a signature effect. Used on the FAB,
+     active chips, and live indicators.
+     ============================================================ */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  --glow-accent: 0 0 20px var(--color-accent-glow),
+                 0 0 40px var(--color-accent-glow-soft);
+  --glow-accent-sm: 0 0 12px var(--color-accent-glow);
+  --glow-accent-strong: 0 0 32px var(--color-accent-glow),
+                        0 0 64px var(--color-accent-glow-soft);
+
+  /* ============================================================
+     LAYOUT
+     ============================================================ */
+  --container-mobile-max: 430px;  /* iPhone 15 Pro Max width */
+  --nav-height: 72px;
+  --header-height: 56px;
+
+  /* ============================================================
+     MOTION
+     ============================================================ */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+}
+
+/* ============================================================
+   UTILITY CLASSES
+   These are core patterns that recur across the app.
+   ============================================================ */
+
+/* Hero numeric readouts (odometer, mileage) — tabular, tight tracking */
+.text-odometer {
+  font-family: var(--font-mono);
+  font-size: var(--text-odometer);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.95;
+  color: var(--color-text-primary);
+}
+
+/* Medium numeric readouts (dashboard stats) */
+.text-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Micro labels — all caps, wide tracking, muted */
+.text-label {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+/* Section headers */
+.text-section {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+
+/* The "FAMILY GARAGE" wordmark treatment — white + cyan */
+.text-wordmark {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.text-wordmark .mark-primary { color: var(--color-text-primary); }
+.text-wordmark .mark-accent { color: var(--color-accent); }
+
+/* Live indicator dot (e.g. SYNCED, DETECTING) */
+.indicator-live {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  box-shadow: var(--glow-accent-sm);
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Card surface with subtle border */
+.surface-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+/* Glowing cyan FAB / primary button */
+.btn-accent-glow {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  box-shadow: var(--glow-accent);
+  transition: box-shadow var(--duration-base) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
+}
+
+.btn-accent-glow:hover {
+  box-shadow: var(--glow-accent-strong);
+}
+
+.btn-accent-glow:active {
+  transform: scale(0.97);
+}
+
+/* ============================================================
+   BASE STYLES
+   ============================================================ */
+html, body {
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ambient background for desktop viewing — subtle radial */
+@media (min-width: 768px) {
+  body {
+    background:
+      radial-gradient(ellipse at top, rgba(0, 212, 255, 0.04) 0%, transparent 50%),
+      var(--color-bg-base);
+    min-height: 100vh;
+  }
+}
