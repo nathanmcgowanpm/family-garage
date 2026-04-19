@@ -1,5 +1,6 @@
 import DashboardScreen from './DashboardScreen'
 import ScheduleScreen from './ScheduleScreen'
+import OnboardingScreen from './OnboardingScreen'
 import AppShell from './components/AppShell'
 import { useState, useRef } from 'react'
 
@@ -65,107 +66,6 @@ function BottomNav({ screen, onNavigate }) {
         )
       })}
     </nav>
-  )
-}
-
-const slab = { fontFamily:'"Space Grotesk"', fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.25em', color:'#f97316' }
-const stitle = { fontFamily:'"Space Grotesk"', fontWeight:800, color:'#f8fafc', textTransform:'uppercase', letterSpacing:'-0.02em', fontStyle:'italic' }
-
-function BtnPrimary({ children, onClick, style = {} }) {
-  return (
-    <button onClick={onClick} style={{ display:'flex', alignItems:'center', justifyContent:'center', background:'#f97316', color:'white', fontFamily:'"Space Grotesk"', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.1em', borderRadius:'1rem', padding:'1.1rem 2rem', cursor:'pointer', border:'none', width:'100%', fontSize:'0.9rem', boxShadow:'0 8px 20px rgba(249,115,22,0.25)', transition:'all 0.15s', ...style }}>
-      {children}
-    </button>
-  )
-}
-
-// ─── Screen 1: Onboarding (keep old styling for now) ─────────
-
-function OnboardingScreen({ onComplete, onSkip }) {
-  const [year, setYear] = useState('2021')
-  const [make, setMake] = useState('')
-  const [model, setModel] = useState('')
-  const [miles, setMiles] = useState('')
-
-  const inputStyle = { background:'rgba(15,23,42,0.5)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'1rem', padding:'1rem', color:'#f8fafc', fontFamily:'Manrope', fontWeight:600, width:'100%', outline:'none', fontSize:'1rem' }
-  const labelStyle = { fontFamily:'"Space Grotesk"', fontSize:10, fontWeight:700, color:'#f97316', textTransform:'uppercase', letterSpacing:'0.2em', marginBottom:6, display:'block', paddingLeft:4 }
-
-  return (
-    <div className="animate-page-in" style={{ minHeight:'100dvh' }}>
-      <header style={{ background:'rgba(2,6,23,0.85)', backdropFilter:'blur(20px)', position:'fixed', top:0, width:'100%', zIndex:50, borderBottom:'3px solid #ea580c' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0 20px', height:72, maxWidth:672, margin:'0 auto' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <Icon name="home_repair_service" style={{ color:'#f97316', fontSize:28 }} />
-            <span style={{ fontFamily:'"Space Grotesk"', fontSize:20, fontWeight:900, letterSpacing:'-0.03em', fontStyle:'italic', textTransform:'uppercase' }}>Family Garage</span>
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
-            <span style={{ ...slab, fontSize:9 }}>Step 1 of 3</span>
-            <div style={{ display:'flex', gap:4 }}>
-              <div style={{ height:4, width:24, background:'#f97316', borderRadius:2 }} />
-              <div style={{ height:4, width:8, background:'#1e293b', borderRadius:2 }} />
-              <div style={{ height:4, width:8, background:'#1e293b', borderRadius:2 }} />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main style={{ maxWidth:560, margin:'0 auto', padding:'88px 20px 40px' }}>
-        <div style={{ position:'relative', width:'100%', borderRadius:'1.5rem', overflow:'hidden', marginBottom:28, aspectRatio:'16/10', boxShadow:'0 20px 40px -15px rgba(249,115,22,0.2)' }}>
-          <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#1e293b,#0f172a)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <Icon name="garage" style={{ fontSize:100, color:'rgba(249,115,22,0.15)' }} />
-          </div>
-          <div style={{ position:'absolute', inset:0, background:'linear-gradient(to top,#020617,transparent 60%)' }} />
-          <div style={{ position:'absolute', bottom:16, left:20 }}><span style={slab}>Your vehicles. Your data.</span></div>
-        </div>
-
-        <div style={{ marginBottom:28 }}>
-          <h1 style={{ ...stitle, fontSize:'2.2rem', lineHeight:1, margin:'0 0 12px' }}>
-            Meet your<br /><span style={{ color:'#f97316' }}>vehicle.</span>
-          </h1>
-          <p style={{ color:'#94a3b8', fontSize:14, lineHeight:1.7, borderLeft:'2px solid rgba(249,115,22,0.3)', paddingLeft:14, maxWidth:300, margin:0 }}>
-            Enter your car details to start your precision maintenance ledger.
-          </p>
-        </div>
-
-        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-            <div>
-              <label style={labelStyle}>Year</label>
-              <select value={year} onChange={e => setYear(e.target.value)} style={{ ...inputStyle, appearance:'none' }}>
-                {['2024','2023','2022','2021','2020','2019','2018','2017'].map(y => <option key={y} value={y} style={{ background:'#0f172a' }}>{y}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Make</label>
-              <input style={inputStyle} type="text" placeholder="TOYOTA" value={make} onChange={e => setMake(e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <label style={labelStyle}>Model</label>
-            <input style={inputStyle} type="text" placeholder="HIGHLANDER" value={model} onChange={e => setModel(e.target.value)} />
-          </div>
-          <div>
-            <label style={labelStyle}>Current Mileage</label>
-            <div style={{ background:'rgba(15,23,42,0.5)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'1rem', display:'flex', alignItems:'center', gap:10 }}>
-              <div style={{ padding:'1rem', display:'flex', alignItems:'center', gap:10, flex:1 }}>
-                <Icon name="speed" style={{ color:'#f97316' }} />
-                <input style={{ background:'transparent', border:'none', color:'#f8fafc', fontFamily:'Manrope', fontWeight:600, width:'100%', outline:'none', fontSize:'1rem' }} type="text" inputMode="numeric" placeholder="42,000" value={miles} onChange={e => setMiles(e.target.value)} />
-              </div>
-              <span style={{ paddingRight:14, fontFamily:'"Space Grotesk"', fontSize:10, fontWeight:700, color:'#334155', textTransform:'uppercase', letterSpacing:'0.15em' }}>mi</span>
-            </div>
-          </div>
-
-          <div style={{ paddingTop:4, display:'flex', flexDirection:'column', gap:8 }}>
-            <BtnPrimary onClick={() => onComplete({ year, make: make||'Toyota', model: model||'Highlander', miles: miles||'42000' })}>
-              Continue to Dashboard
-            </BtnPrimary>
-            <button onClick={onSkip} style={{ background:'none', border:'none', color:'#475569', fontFamily:'"Space Grotesk"', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', cursor:'pointer', padding:10 }}>
-              I'll do this later
-            </button>
-          </div>
-        </div>
-      </main>
-    </div>
   )
 }
 
@@ -284,24 +184,36 @@ function DefenseScreen({ onNavigate }) {
 export default function App() {
   const [screen, setScreen] = useState('onboarding')
   const [vehicles, setVehicles] = useState([
-    { name:'2021 Toyota Highlander', type:'SUV', miles:'42,000 miles', milesRaw:42000 },
-    { name:'2018 Honda Odyssey', type:'Minivan', miles:'84,200 miles', milesRaw:84200 },
+    { name:'2021 Toyota Highlander', nickname: 'Highlander', type:'SUV', miles:'42,000 miles', milesRaw:42000 },
+    { name:'2018 Honda Odyssey', nickname: 'Odyssey', type:'Minivan', miles:'84,200 miles', milesRaw:84200 },
   ])
   const [activeVehicle, setActiveVehicle] = useState(0)
   const [serviceRecords, setServiceRecords] = useState([])
+  const [preferences, setPreferences] = useState({
+    serviceReminders: true,
+    recalls: true,
+    email: false,
+  })
 
   function navigate(s) {
     setScreen(s)
     window.scrollTo(0, 0)
   }
 
-  function handleOnboardingComplete({ year, make, model, miles }) {
+  function handleOnboardingComplete({ year, make, model, miles, nickname, preferences: prefs }) {
     const milesRaw = parseInt(miles) || 42000
     setVehicles(v => {
       const updated = [...v]
-      updated[0] = { name:`${year} ${make} ${model}`, type:'Vehicle', miles:`${milesRaw.toLocaleString()} miles`, milesRaw }
+      updated[0] = {
+        name: `${year} ${make} ${model}`,
+        nickname: nickname || model,
+        type: 'Vehicle',
+        miles: `${milesRaw.toLocaleString()} miles`,
+        milesRaw,
+      }
       return updated
     })
+    if (prefs) setPreferences(prefs)
     navigate('dashboard')
   }
 
