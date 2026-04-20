@@ -1,23 +1,24 @@
 import DashboardScreen from './DashboardScreen'
 import ScheduleScreen from './ScheduleScreen'
 import OnboardingScreen from './OnboardingScreen'
+import LoginScreen from './LoginScreen'
+import AccountMenu from './components/AccountMenu'
+import VehicleSheet from './components/VehicleSheet'
 import AppShell from './components/AppShell'
+import { useAuth } from './hooks/useAuth'
 import { useState, useRef } from 'react'
 
 // ─── Shared UI pieces ────────────────────────────────────────
 
 function Icon({ name, fill = false, className = '', style = {} }) {
   return (
-    <span
-      className={`msym ${fill ? 'msym-fill' : ''} ${className}`}
-      style={style}
-    >
+    <span className={`msym ${fill ? 'msym-fill' : ''} ${className}`} style={style}>
       {name}
     </span>
   )
 }
 
-function AppHeader({ screen, onNavigate }) {
+function AppHeader({ screen, onNavigate, onOpenAccount }) {
   if (screen === 'onboarding') return null
 
   return (
@@ -36,11 +37,19 @@ function AppHeader({ screen, onNavigate }) {
             <span style={{ color: 'var(--color-accent)' }}>Garage</span>
           </span>
         </div>
-        {screen === 'dashboard' && (
-          <div style={{ width:32, height:32, borderRadius:'50%', border:'1px solid var(--color-border-subtle)', background:'var(--color-bg-surface)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-            <Icon name="person" style={{ color:'var(--color-text-secondary)', fontSize:17 }} />
-          </div>
-        )}
+        <button
+          onClick={onOpenAccount}
+          title="Account"
+          style={{
+            width:32, height:32, borderRadius:'50%',
+            border:'1px solid var(--color-border-subtle)',
+            background:'var(--color-bg-surface)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            cursor:'pointer',
+          }}
+        >
+          <Icon name="person" style={{ color:'var(--color-text-secondary)', fontSize:17 }} />
+        </button>
       </div>
     </header>
   )
@@ -69,7 +78,7 @@ function BottomNav({ screen, onNavigate }) {
   )
 }
 
-// ─── Screen 4: Import (simplified stub for now) ──────────────
+// ─── Import screen stub ──────────────────────────────────────
 
 function ImportScreen({ onFinalize }) {
   const [parseState, setParseState] = useState('idle')
@@ -168,9 +177,7 @@ function ImportScreen({ onFinalize }) {
   )
 }
 
-// ─── Screen 5: Defense Report (stub) ─────────────────────────
-
-function DefenseScreen({ onNavigate }) {
+function DefenseScreen() {
   return (
     <div className="animate-page-in" style={{ paddingTop: 88, paddingBottom: 100, paddingLeft: 20, paddingRight: 20 }}>
       <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', fontWeight: 600, margin:'0 0 16px' }}>Defense Report</h2>
@@ -179,28 +186,43 @@ function DefenseScreen({ onNavigate }) {
   )
 }
 
+function LoadingScreen() {
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--color-bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--color-text-tertiary)' }}>
+        <span style={{ color: 'var(--color-text-primary)' }}>Family </span>
+        <span style={{ color: 'var(--color-accent)' }}>Garage</span>
+      </div>
+    </div>
+  )
+}
+
 // ─── Root App ────────────────────────────────────────────────
 
 export default function App() {
-  const [screen, setScreen] = useState('onboarding')
+  const { user, loading, signOut } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (!user) return <LoginScreen />
+  return <SignedInApp user={user} onSignOut={signOut} />
+}
+
+function SignedInApp({ user, onSignOut }) {
+  const [screen, setScreen] = useState('dashboard')
   const [vehicles, setVehicles] = useState([
-    { name:'2021 Toyota Highlander', nickname: 'Highlander', type:'SUV', miles:'42,000 miles', milesRaw:42000 },
-    { name:'2018 Honda Odyssey', nickname: 'Odyssey', type:'Minivan', miles:'84,200 miles', milesRaw:84200 },
+    { name: '2021 Toyota Highlander', nickname: 'Highlander', type: 'SUV', miles: '42,000 miles', milesRaw: 42000 },
+    { name: '2018 Honda Odyssey', nickname: 'Odyssey', type: 'Minivan', miles: '84,200 miles', milesRaw: 84200 },
   ])
   const [activeVehicle, setActiveVehicle] = useState(0)
   const [serviceRecords, setServiceRecords] = useState([])
-  const [preferences, setPreferences] = useState({
-    serviceReminders: true,
-    recalls: true,
-    email: false,
-  })
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [vehicleSheet, setVehicleSheet] = useState(null)  // null | 'list' | 'add'
 
   function navigate(s) {
     setScreen(s)
     window.scrollTo(0, 0)
   }
 
-  function handleOnboardingComplete({ year, make, model, miles, nickname, preferences: prefs }) {
+  function handleOnboardingComplete({ year, make, model, miles, nickname }) {
     const milesRaw = parseInt(miles) || 42000
     setVehicles(v => {
       const updated = [...v]
@@ -213,7 +235,6 @@ export default function App() {
       }
       return updated
     })
-    if (prefs) setPreferences(prefs)
     navigate('dashboard')
   }
 
@@ -222,16 +243,31 @@ export default function App() {
     navigate('schedule')
   }
 
+  // Vehicle management callbacks
+  function handleUpdateVehicle(index, updated) {
+    setVehicles(v => v.map((veh, i) => (i === index ? updated : veh)))
+  }
+
+  function handleArchiveVehicle(index) {
+    setVehicles(v => v.filter((_, i) => i !== index))
+    if (activeVehicle >= vehicles.length - 1) {
+      setActiveVehicle(Math.max(0, vehicles.length - 2))
+    }
+  }
+
+  function handleAddVehicle(newVehicle) {
+    setVehicles(v => [...v, newVehicle])
+    setActiveVehicle(vehicles.length)  // select the new one
+  }
+
   const screenContent = (
     <>
-      {screen === 'onboarding' && (
-        <OnboardingScreen onComplete={handleOnboardingComplete} onSkip={() => navigate('dashboard')} />
-      )}
       {screen === 'dashboard' && (
         <DashboardScreen
           vehicles={vehicles}
           activeVehicle={activeVehicle}
           onSwitchVehicle={(i) => setActiveVehicle(typeof i === 'number' ? i : (activeVehicle + 1) % vehicles.length)}
+          onAddVehicle={() => setVehicleSheet('add')}
           onNavigate={navigate}
           serviceRecords={serviceRecords}
         />
@@ -244,26 +280,51 @@ export default function App() {
           serviceRecords={serviceRecords}
         />
       )}
-      {screen === 'import' && (
-        <ImportScreen onFinalize={handleFinalizeRecord} />
-      )}
-      {screen === 'defense' && (
-        <DefenseScreen onNavigate={navigate} />
-      )}
+      {screen === 'import' && <ImportScreen onFinalize={handleFinalizeRecord} />}
+      {screen === 'defense' && <DefenseScreen />}
     </>
   )
 
   return (
-    <AppShell
-      screen={screen}
-      onNavigate={navigate}
-      vehicles={vehicles}
-      activeVehicle={activeVehicle}
-      onSelectVehicle={setActiveVehicle}
-      mobileHeader={<AppHeader screen={screen} onNavigate={navigate} />}
-      mobileNav={<BottomNav screen={screen} onNavigate={navigate} />}
-    >
-      {screenContent}
-    </AppShell>
+    <>
+      <AppShell
+        screen={screen}
+        onNavigate={navigate}
+        vehicles={vehicles}
+        activeVehicle={activeVehicle}
+        onSelectVehicle={setActiveVehicle}
+        onAddVehicle={() => setVehicleSheet('add')}
+        onOpenAccount={() => setAccountOpen(true)}
+        user={user}
+        mobileHeader={<AppHeader screen={screen} onNavigate={navigate} onOpenAccount={() => setAccountOpen(true)} />}
+        mobileNav={<BottomNav screen={screen} onNavigate={navigate} />}
+      >
+        {screenContent}
+      </AppShell>
+
+      {/* Account dropdown */}
+      {accountOpen && (
+        <AccountMenu
+          user={user}
+          onSignOut={onSignOut}
+          onClose={() => setAccountOpen(false)}
+          onManageVehicles={() => setVehicleSheet('list')}
+        />
+      )}
+
+      {/* Vehicle management sheet */}
+      {vehicleSheet && (
+        <VehicleSheet
+          vehicles={vehicles}
+          activeVehicle={activeVehicle}
+          onSelectVehicle={setActiveVehicle}
+          onUpdateVehicle={handleUpdateVehicle}
+          onArchiveVehicle={handleArchiveVehicle}
+          onAddVehicle={handleAddVehicle}
+          onClose={() => setVehicleSheet(null)}
+          initialView={vehicleSheet}
+        />
+      )}
+    </>
   )
 }
