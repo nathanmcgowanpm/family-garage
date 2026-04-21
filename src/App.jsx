@@ -5,8 +5,31 @@ import LoginScreen from './LoginScreen'
 import AccountMenu from './components/AccountMenu'
 import VehicleSheet from './components/VehicleSheet'
 import AppShell from './components/AppShell'
+import { DashboardSkeleton } from './components/Skeletons'
 import { useAuth } from './hooks/useAuth'
-import { useState, useRef } from 'react'
+import { useVehicles } from './hooks/useVehicles'
+import { useServiceRecords } from './hooks/useServiceRecords'
+import { useState, useRef, useEffect } from 'react'
+
+// ─── Vehicle shape adapters ──────────────────────────────────
+// The UI components were built around a flat display shape:
+//   { name, nickname, type, miles, milesRaw, ...dbFields }
+// Supabase rows use: { year, make, model, trim, nickname, current_mileage, ... }
+// These helpers bridge the two worlds so screen components don't
+// need to change.
+
+function toDisplay(row) {
+  if (!row) return null
+  const miles = row.current_mileage ?? 0
+  return {
+    ...row,  // keep all raw db fields available
+    name: `${row.year ?? ''} ${row.make ?? ''} ${row.model ?? ''}`.trim(),
+    nickname: row.nickname || row.model || 'Vehicle',
+    type: row.trim || 'Vehicle',
+    miles: `${miles.toLocaleString()} miles`,
+    milesRaw: miles,
+  }
+}
 
 // ─── Shared UI pieces ────────────────────────────────────────
 
@@ -78,9 +101,9 @@ function BottomNav({ screen, onNavigate }) {
   )
 }
 
-// ─── Import screen stub ──────────────────────────────────────
+// ─── Import screen ───────────────────────────────────────────
 
-function ImportScreen({ onFinalize }) {
+function ImportScreen({ onFinalize, saving }) {
   const [parseState, setParseState] = useState('idle')
   const [parsedData, setParsedData] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -170,7 +193,13 @@ function ImportScreen({ onFinalize }) {
       {parseState === 'done' && parsedData && (
         <div style={{ marginTop: 16 }}>
           <p style={{ color: 'var(--color-text-primary)', marginBottom: 16 }}>Parsed: {parsedData.service_type} — ${parsedData.cost}</p>
-          <button onClick={() => onFinalize(parsedData)} style={{ background:'var(--color-accent)', color:'var(--color-text-inverse)', padding:'12px 24px', borderRadius:12, fontWeight:600, fontSize:13, border:'none', cursor:'pointer', width: '100%' }}>Save to Service History</button>
+          <button
+            onClick={() => onFinalize(parsedData)}
+            disabled={saving}
+            style={{ background:'var(--color-accent)', color:'var(--color-text-inverse)', padding:'12px 24px', borderRadius:12, fontWeight:600, fontSize:13, border:'none', cursor: saving ? 'wait' : 'pointer', width: '100%', opacity: saving ? 0.6 : 1 }}
+          >
+            {saving ? 'Saving…' : 'Save to Service History'}
+          </button>
         </div>
       )}
     </div>
@@ -201,6 +230,16 @@ function LoadingScreen() {
 
 export default function App() {
   const { user, loading, signOut } = useAuth()
+
+  // One-time cleanup of stale localStorage from the pre-Supabase prototype.
+  useEffect(() => {
+    if (user && !localStorage.getItem('fg_migrated_to_supabase')) {
+      localStorage.removeItem('fg_vehicles')
+      localStorage.removeItem('fg_service_records')
+      localStorage.setItem('fg_migrated_to_supabase', '1')
+    }
+  }, [user])
+
   if (loading) return <LoadingScreen />
   if (!user) return <LoginScreen />
   return <SignedInApp user={user} onSignOut={signOut} />
@@ -208,56 +247,177 @@ export default function App() {
 
 function SignedInApp({ user, onSignOut }) {
   const [screen, setScreen] = useState('dashboard')
-  const [vehicles, setVehicles] = useState([
-    { name: '2021 Toyota Highlander', nickname: 'Highlander', type: 'SUV', miles: '42,000 miles', milesRaw: 42000 },
-    { name: '2018 Honda Odyssey', nickname: 'Odyssey', type: 'Minivan', miles: '84,200 miles', milesRaw: 84200 },
-  ])
-  const [activeVehicle, setActiveVehicle] = useState(0)
-  const [serviceRecords, setServiceRecords] = useState([])
+  const [activeVehicleIdx, setActiveVehicleIdx] = useState(0)
   const [accountOpen, setAccountOpen] = useState(false)
   const [vehicleSheet, setVehicleSheet] = useState(null)  // null | 'list' | 'add'
+
+  // ─── Supabase-backed data ──────────────────────────────────
+  const {
+    vehicles: rawVehicles,
+    loading: vehiclesLoading,
+    saving: vehicleSaving,
+    addVehicle,
+    updateVehicle,
+    deleteVehicle,
+  } = useVehicles()
+
+  // Adapt rows to the display shape UI components expect
+  const vehicles = rawVehicles.map(toDisplay)
+  const activeVehicle = Math.min(activeVehicleIdx, Math.max(0, vehicles.length - 1))
+  const activeVehicleId = vehicles[activeVehicle]?.id ?? null
+
+  // Service records scoped to the active vehicle
+  const {
+    records: serviceRecords,
+    loading: recordsLoading,
+    saving: recordSaving,
+    addRecord,
+  } = useServiceRecords(activeVehicleId)
 
   function navigate(s) {
     setScreen(s)
     window.scrollTo(0, 0)
   }
 
-  function handleOnboardingComplete({ year, make, model, miles, nickname }) {
-    const milesRaw = parseInt(miles) || 42000
-    setVehicles(v => {
-      const updated = [...v]
-      updated[0] = {
-        name: `${year} ${make} ${model}`,
-        nickname: nickname || model,
-        type: 'Vehicle',
-        miles: `${milesRaw.toLocaleString()} miles`,
-        milesRaw,
-      }
-      return updated
+  // ─── Empty-state onboarding ────────────────────────────────
+  // No vehicles yet? Show onboarding instead of the dashboard.
+  const needsOnboarding = !vehiclesLoading && vehicles.length === 0
+
+  async function handleOnboardingComplete({ year, make, model, miles, nickname }) {
+    const milesRaw = parseInt(String(miles).replace(/,/g, '')) || 0
+    const { error } = await addVehicle({
+      year: parseInt(year) || null,
+      make: make || '',
+      model: model || '',
+      nickname: nickname || null,
+      current_mileage: milesRaw,
+      mileage_updated_at: new Date().toISOString(),
     })
+    if (error) {
+      alert(`Could not save vehicle: ${error.message}`)
+      return
+    }
+    setActiveVehicleIdx(0)
     navigate('dashboard')
   }
 
-  function handleFinalizeRecord(parsedData) {
-    setServiceRecords(prev => [parsedData, ...prev])
+  async function handleFinalizeRecord(parsedData) {
+    if (!activeVehicleId) {
+      alert('Add a vehicle first.')
+      return
+    }
+    // Dollars → cents. Parsed `cost` comes back as a string or number.
+    const costNum = parseFloat(String(parsedData.cost ?? '').replace(/[^0-9.]/g, ''))
+    const cost_cents = Number.isFinite(costNum) ? Math.round(costNum * 100) : null
+
+    // Mileage may arrive as "52,400" or similar
+    const mileageNum = parseInt(String(parsedData.mileage ?? '').replace(/[^0-9]/g, ''))
+    const mileage_at_service = Number.isFinite(mileageNum) ? mileageNum : null
+
+    const { error } = await addRecord({
+      service_type: parsedData.service_type || 'Service',
+      shop_name: parsedData.shop_name || null,
+      service_date: parsedData.date || null,
+      mileage_at_service,
+      cost_cents,
+      notes: parsedData.notes || null,
+      line_items: Array.isArray(parsedData.line_items) ? parsedData.line_items : null,
+      raw_parsed_data: parsedData,
+      source: 'ai_receipt_upload',
+      status: 'active',
+    })
+    if (error) {
+      alert(`Could not save record: ${error.message}`)
+      return
+    }
     navigate('schedule')
   }
 
-  // Vehicle management callbacks
-  function handleUpdateVehicle(index, updated) {
-    setVehicles(v => v.map((veh, i) => (i === index ? updated : veh)))
+  // ─── Vehicle management callbacks ──────────────────────────
+  async function handleUpdateVehicle(index, updated) {
+    const row = rawVehicles[index]
+    if (!row) return
+    // VehicleSheet may pass either display-shape or raw-shape fields.
+    // Keep only raw DB columns on the way out.
+    const {
+      year, make, model, trim, nickname, vin, license_plate,
+      current_mileage, mileage_updated_at,
+    } = updated
+    const patch = {}
+    if (year !== undefined) patch.year = year
+    if (make !== undefined) patch.make = make
+    if (model !== undefined) patch.model = model
+    if (trim !== undefined) patch.trim = trim
+    if (nickname !== undefined) patch.nickname = nickname
+    if (vin !== undefined) patch.vin = vin
+    if (license_plate !== undefined) patch.license_plate = license_plate
+    if (current_mileage !== undefined) {
+      patch.current_mileage = current_mileage
+      patch.mileage_updated_at = mileage_updated_at ?? new Date().toISOString()
+    }
+    const { error } = await updateVehicle(row.id, patch)
+    if (error) alert(`Could not update vehicle: ${error.message}`)
   }
 
-  function handleArchiveVehicle(index) {
-    setVehicles(v => v.filter((_, i) => i !== index))
-    if (activeVehicle >= vehicles.length - 1) {
-      setActiveVehicle(Math.max(0, vehicles.length - 2))
+  async function handleArchiveVehicle(index) {
+    const row = rawVehicles[index]
+    if (!row) return
+    const { error } = await deleteVehicle(row.id)
+    if (error) {
+      alert(`Could not remove vehicle: ${error.message}`)
+      return
+    }
+    if (activeVehicleIdx >= rawVehicles.length - 1) {
+      setActiveVehicleIdx(Math.max(0, rawVehicles.length - 2))
     }
   }
 
-  function handleAddVehicle(newVehicle) {
-    setVehicles(v => [...v, newVehicle])
-    setActiveVehicle(vehicles.length)  // select the new one
+  async function handleAddVehicle(newVehicle) {
+    // newVehicle comes from VehicleSheet in either display or raw shape.
+    const milesRaw =
+      typeof newVehicle.current_mileage === 'number'
+        ? newVehicle.current_mileage
+        : parseInt(String(newVehicle.milesRaw ?? newVehicle.miles ?? '').replace(/[^0-9]/g, '')) || 0
+
+    const { error } = await addVehicle({
+      year: newVehicle.year ?? null,
+      make: newVehicle.make ?? '',
+      model: newVehicle.model ?? '',
+      trim: newVehicle.trim ?? null,
+      nickname: newVehicle.nickname ?? null,
+      current_mileage: milesRaw,
+      mileage_updated_at: new Date().toISOString(),
+    })
+    if (error) {
+      alert(`Could not add vehicle: ${error.message}`)
+      return
+    }
+    setActiveVehicleIdx(rawVehicles.length)  // newly added row will land at end
+  }
+
+  // ─── Render ────────────────────────────────────────────────
+
+  if (vehiclesLoading) {
+    return (
+      <AppShell
+        screen="dashboard"
+        onNavigate={navigate}
+        vehicles={[]}
+        activeVehicle={0}
+        onSelectVehicle={() => {}}
+        onAddVehicle={() => {}}
+        onOpenAccount={() => {}}
+        user={user}
+        mobileHeader={<AppHeader screen="dashboard" onNavigate={navigate} onOpenAccount={() => {}} />}
+        mobileNav={null}
+      >
+        <DashboardSkeleton />
+      </AppShell>
+    )
+  }
+
+  if (needsOnboarding) {
+    return <OnboardingScreen onComplete={handleOnboardingComplete} />
   }
 
   const screenContent = (
@@ -266,10 +426,11 @@ function SignedInApp({ user, onSignOut }) {
         <DashboardScreen
           vehicles={vehicles}
           activeVehicle={activeVehicle}
-          onSwitchVehicle={(i) => setActiveVehicle(typeof i === 'number' ? i : (activeVehicle + 1) % vehicles.length)}
+          onSwitchVehicle={(i) => setActiveVehicleIdx(typeof i === 'number' ? i : (activeVehicle + 1) % vehicles.length)}
           onAddVehicle={() => setVehicleSheet('add')}
           onNavigate={navigate}
           serviceRecords={serviceRecords}
+          recordsLoading={recordsLoading}
         />
       )}
       {screen === 'schedule' && (
@@ -278,9 +439,10 @@ function SignedInApp({ user, onSignOut }) {
           activeVehicle={activeVehicle}
           onNavigate={navigate}
           serviceRecords={serviceRecords}
+          recordsLoading={recordsLoading}
         />
       )}
-      {screen === 'import' && <ImportScreen onFinalize={handleFinalizeRecord} />}
+      {screen === 'import' && <ImportScreen onFinalize={handleFinalizeRecord} saving={recordSaving} />}
       {screen === 'defense' && <DefenseScreen />}
     </>
   )
@@ -292,7 +454,7 @@ function SignedInApp({ user, onSignOut }) {
         onNavigate={navigate}
         vehicles={vehicles}
         activeVehicle={activeVehicle}
-        onSelectVehicle={setActiveVehicle}
+        onSelectVehicle={setActiveVehicleIdx}
         onAddVehicle={() => setVehicleSheet('add')}
         onOpenAccount={() => setAccountOpen(true)}
         user={user}
@@ -317,12 +479,13 @@ function SignedInApp({ user, onSignOut }) {
         <VehicleSheet
           vehicles={vehicles}
           activeVehicle={activeVehicle}
-          onSelectVehicle={setActiveVehicle}
+          onSelectVehicle={setActiveVehicleIdx}
           onUpdateVehicle={handleUpdateVehicle}
           onArchiveVehicle={handleArchiveVehicle}
           onAddVehicle={handleAddVehicle}
           onClose={() => setVehicleSheet(null)}
           initialView={vehicleSheet}
+          saving={vehicleSaving}
         />
       )}
     </>
