@@ -323,8 +323,8 @@ function SignedInApp({ user, onSignOut }) {
       notes: parsedData.notes || null,
       line_items: Array.isArray(parsedData.line_items) ? parsedData.line_items : null,
       raw_parsed_data: parsedData,
-      source: 'ai_receipt_upload',
-      status: 'active',
+      source: 'upload',
+      status: 'confirmed',
     })
     if (error) {
       alert(`Could not save record: ${error.message}`)
