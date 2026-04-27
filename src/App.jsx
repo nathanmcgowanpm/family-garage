@@ -5,6 +5,7 @@ import LoginScreen from './LoginScreen'
 import AccountMenu from './components/AccountMenu'
 import VehicleSheet from './components/VehicleSheet'
 import AppShell from './components/AppShell'
+import { buildReceiptParseRequest, extractParsedReceipt } from '../lib/receiptParsing'
 import { DashboardSkeleton } from './components/Skeletons'
 import { useAuth } from './hooks/useAuth'
 import { useVehicles } from './hooks/useVehicles'
@@ -127,7 +128,7 @@ function ImportScreen({ onFinalize, saving }) {
     setParsedData({ file, isPDF, isImage, previewUrl: isImage ? URL.createObjectURL(file) : null })
   }
 
-  async function startParsing() {
+ async function startParsing() {
     if (!parsedData?.file) return
     setParseState('parsing')
     try {
@@ -141,23 +142,12 @@ function ImportScreen({ onFinalize, saving }) {
       const response = await fetch('/api/parse-receipt', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1024,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: parsedData.isPDF ? 'document' : 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-              { type: 'text', text: `Parse this vehicle service receipt. Respond ONLY with JSON: {"service_type": "...", "shop_name": "...", "date": "...", "mileage": "...", "cost": "...", "line_items": [], "notes": "..."}. Use null for missing.` },
-            ],
-          }],
-        }),
+        body: JSON.stringify(buildReceiptParseRequest({ base64, mediaType })),
       })
       if (!response.ok) throw new Error(`API error ${response.status}`)
       const data = await response.json()
-      const text = data.content?.find(b => b.type === 'text')?.text || ''
-      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
-      setParsedData(prev => ({ ...prev, ...parsed }))
+      const parsed = extractParsedReceipt(data)
+      setParsedData((prev) => ({ ...prev, ...parsed }))
       setParseState('done')
     } catch (err) {
       setErrorMsg(err.message || 'Something went wrong.')
