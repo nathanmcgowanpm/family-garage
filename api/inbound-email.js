@@ -28,12 +28,35 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server configuration error' })
   }
 
-  const authHeader = req.headers.authorization || ''
-  const expectedAuth = 'Basic ' + Buffer.from(`postmark:${expectedSecret}`).toString('base64')
-  if (authHeader !== expectedAuth) {
-    console.warn('Invalid auth on inbound-email webhook')
-    return res.status(401).json({ error: 'Unauthorized' })
+ const authHeader = req.headers.authorization || ''
+const expectedAuth = 'Basic ' + Buffer.from(`postmark:${expectedSecret}`).toString('base64')
+
+if (authHeader !== expectedAuth) {
+  // TEMPORARY DEBUG - revert after diagnosing
+  const expectedSnippet = expectedSecret
+    ? expectedSecret.slice(0, 8) + '...' + expectedSecret.slice(-8)
+    : 'EMPTY'
+  let receivedDecoded = 'NO_HEADER'
+  if (authHeader.startsWith('Basic ')) {
+    try {
+      receivedDecoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8')
+      const colonIdx = receivedDecoded.indexOf(':')
+      if (colonIdx !== -1) {
+        const username = receivedDecoded.slice(0, colonIdx)
+        const password = receivedDecoded.slice(colonIdx + 1)
+        receivedDecoded = `user="${username}" passLen=${password.length} passSnippet="${password.slice(0, 8)}...${password.slice(-8)}"`
+      }
+    } catch (e) {
+      receivedDecoded = 'DECODE_ERROR'
+    }
   }
+  console.warn('Invalid auth', {
+    envSecretLen: expectedSecret?.length || 0,
+    envSecretSnippet: expectedSnippet,
+    received: receivedDecoded,
+  })
+  return res.status(401).json({ error: 'Unauthorized' })
+}
 
   const payload = req.body
   const fromAddress = payload?.FromFull?.Email?.toLowerCase()?.trim()
