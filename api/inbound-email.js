@@ -21,42 +21,18 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  // Auth check - basic auth from Postmark
+  // Auth check — token in query parameter
   const expectedSecret = process.env.POSTMARK_WEBHOOK_SECRET
   if (!expectedSecret) {
     console.error('POSTMARK_WEBHOOK_SECRET not configured')
     return res.status(500).json({ error: 'Server configuration error' })
   }
 
- const authHeader = req.headers.authorization || ''
-const expectedAuth = 'Basic ' + Buffer.from(`postmark:${expectedSecret}`).toString('base64')
-
-if (authHeader !== expectedAuth) {
-  // TEMPORARY DEBUG - revert after diagnosing
-  const expectedSnippet = expectedSecret
-    ? expectedSecret.slice(0, 8) + '...' + expectedSecret.slice(-8)
-    : 'EMPTY'
-  let receivedDecoded = 'NO_HEADER'
-  if (authHeader.startsWith('Basic ')) {
-    try {
-      receivedDecoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8')
-      const colonIdx = receivedDecoded.indexOf(':')
-      if (colonIdx !== -1) {
-        const username = receivedDecoded.slice(0, colonIdx)
-        const password = receivedDecoded.slice(colonIdx + 1)
-        receivedDecoded = `user="${username}" passLen=${password.length} passSnippet="${password.slice(0, 8)}...${password.slice(-8)}"`
-      }
-    } catch (e) {
-      receivedDecoded = 'DECODE_ERROR'
-    }
+  const providedToken = req.query?.token
+  if (providedToken !== expectedSecret) {
+    console.warn('Invalid auth on inbound-email webhook')
+    return res.status(401).json({ error: 'Unauthorized' })
   }
-  console.warn('Invalid auth', {
-    envSecretLen: expectedSecret?.length || 0,
-    envSecretSnippet: expectedSnippet,
-    received: receivedDecoded,
-  })
-  return res.status(401).json({ error: 'Unauthorized' })
-}
 
   const payload = req.body
   const fromAddress = payload?.FromFull?.Email?.toLowerCase()?.trim()
@@ -126,17 +102,14 @@ if (authHeader !== expectedAuth) {
     return res.status(200).json({ ok: true, matched: true, parsed: 0 })
   }
 
-  // Find vehicle - use most recently updated.
-  // Future: match make/model/VIN from receipt text against vehicles list.
-  const { data: vehicles, error: vehiclesError } = await supabaseAdmin
-    .from('vehicles')
-    .select('id')
-    .eq('created_by', userId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
+  // Find the user's household(s)
+  const { data: memberships, error: membershipError } = await supabaseAdmin
+    .from('household_members')
+    .select('household_id')
+    .eq('user_id', userId)
 
-  if (vehiclesError || !vehicles?.length) {
-    console.error('No vehicle found for user', userId, vehiclesError)
+  if (membershipError || !memberships?.length) {
+    console.error('No household for user', userId, membershipError)
     await supabaseAdmin.from('unmatched_emails').insert({
       from_address: fromAddress,
       from_name: fromName,
@@ -147,7 +120,36 @@ if (authHeader !== expectedAuth) {
       postmark_payload: payload,
       claimed_by_user_id: userId,
       claimed_at: new Date().toISOString(),
-      notes: 'matched user but no vehicle on account',
+      notes: 'matched user but no household',
+    })
+    return res.status(200).json({ ok: true, matched: true, parsed: 0, reason: 'no_household' })
+  }
+
+  const householdIds = memberships.map((m) => m.household_id)
+
+  // Find the most recently updated vehicle in any of the user's households.
+  // Future: match make/model/VIN from receipt text against vehicles list.
+  const { data: vehicles, error: vehiclesError } = await supabaseAdmin
+    .from('vehicles')
+    .select('id, household_id')
+    .in('household_id', householdIds)
+    .is('archived_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+
+  if (vehiclesError || !vehicles?.length) {
+    console.error('No vehicle found for user households', userId, vehiclesError)
+    await supabaseAdmin.from('unmatched_emails').insert({
+      from_address: fromAddress,
+      from_name: fromName,
+      subject,
+      text_body: textBody,
+      html_body: htmlBody,
+      attachment_count: attachments.length,
+      postmark_payload: payload,
+      claimed_by_user_id: userId,
+      claimed_at: new Date().toISOString(),
+      notes: 'matched user but no active vehicle in household',
     })
     return res.status(200).json({ ok: true, matched: true, parsed: 0, reason: 'no_vehicle' })
   }
