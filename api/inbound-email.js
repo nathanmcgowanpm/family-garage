@@ -28,11 +28,19 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server configuration error' })
   }
 
-  const providedToken = req.query?.token
-  if (providedToken !== expectedSecret) {
-    console.warn('Invalid auth on inbound-email webhook')
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+ const providedToken = req.query?.token
+if (providedToken !== expectedSecret) {
+  console.warn('Invalid auth', {
+    envSecretLen: expectedSecret?.length || 0,
+    envSecretFirst4: expectedSecret?.slice(0, 4) || 'none',
+    envSecretLast4: expectedSecret?.slice(-4) || 'none',
+    providedTokenLen: providedToken?.length || 0,
+    providedTokenFirst4: providedToken?.slice(0, 4) || 'none',
+    providedTokenLast4: providedToken?.slice(-4) || 'none',
+    fullQueryKeys: Object.keys(req.query || {}),
+  })
+  return res.status(401).json({ error: 'Unauthorized' })
+}
 
   const payload = req.body
   const fromAddress = payload?.FromFull?.Email?.toLowerCase()?.trim()
