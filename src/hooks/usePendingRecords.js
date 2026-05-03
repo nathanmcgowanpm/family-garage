@@ -9,6 +9,11 @@
  * Each row is joined with its vehicle so cards can show
  * "2021 Toyota Highlander · Jiffy Lube · $48".
  *
+ * Scoping is enforced by RLS on service_records — which traces back
+ * to the household via the vehicle relationship. We don't need to
+ * filter on household_id explicitly (and indeed can't — service_records
+ * has no household_id column).
+ *
  * Exposes three actions:
  *   - confirm(id)            → status: 'confirmed'
  *   - update(id, patch)      → general update + status: 'confirmed'
@@ -21,18 +26,17 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useHousehold } from './useHousehold'
+import { useAuth } from './useAuth'
 
 export function usePendingRecords() {
-  const { householdId, loading: householdLoading } = useHousehold()
+  const { user } = useAuth()
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // ─── Fetch when household resolves ───────────────────────────
+  // ─── Fetch when user is available ────────────────────────────
   useEffect(() => {
-    if (householdLoading) return
-    if (!householdId) {
+    if (!user) {
       setRecords([])
       setLoading(false)
       return
@@ -42,13 +46,14 @@ export function usePendingRecords() {
 
     async function fetchPending() {
       setLoading(true)
+      // RLS on service_records scopes to the user's household via
+      // the vehicle relationship — no explicit household filter needed.
       const { data, error } = await supabase
         .from('service_records')
         .select(`
           *,
           vehicle:vehicles ( id, year, make, model, nickname )
         `)
-        .eq('household_id', householdId)
         .eq('status', 'pending_review')
         .order('created_at', { ascending: false })
 
@@ -66,7 +71,7 @@ export function usePendingRecords() {
 
     fetchPending()
     return () => { cancelled = true }
-  }, [householdId, householdLoading])
+  }, [user])
 
   // ─── confirm: flip status to 'confirmed' (optimistic) ────────
   const confirm = useCallback(async (id) => {
