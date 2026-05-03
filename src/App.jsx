@@ -5,11 +5,14 @@ import LoginScreen from './LoginScreen'
 import AccountMenu from './components/AccountMenu'
 import VehicleSheet from './components/VehicleSheet'
 import AppShell from './components/AppShell'
+import PendingReviewBanner from './components/PendingReviewBanner'
+import ReceiptForm from './components/ReceiptForm'
 import { buildReceiptParseRequest, extractParsedReceipt } from '../lib/receiptParsing'
 import { DashboardSkeleton } from './components/Skeletons'
 import { useAuth } from './hooks/useAuth'
 import { useVehicles } from './hooks/useVehicles'
 import { useServiceRecords } from './hooks/useServiceRecords'
+import { usePendingRecords } from './hooks/usePendingRecords'
 import { useState, useRef, useEffect } from 'react'
 
 // ─── Vehicle shape adapters ──────────────────────────────────
@@ -104,7 +107,7 @@ function BottomNav({ screen, onNavigate }) {
 
 // ─── Import screen ───────────────────────────────────────────
 
-function ImportScreen({ onFinalize, saving }) {
+function ImportScreen({ onFinalize, saving, vehicles, activeVehicleId }) {
   const [parseState, setParseState] = useState('idle')
   const [parsedData, setParsedData] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -182,14 +185,17 @@ function ImportScreen({ onFinalize, saving }) {
       {parseState === 'error' && <p style={{ color: 'var(--color-status-danger)', padding: 20 }}>Error: {errorMsg} <button onClick={resetUpload}>Try again</button></p>}
       {parseState === 'done' && parsedData && (
         <div style={{ marginTop: 16 }}>
-          <p style={{ color: 'var(--color-text-primary)', marginBottom: 16 }}>Parsed: {parsedData.service_type} — ${parsedData.cost}</p>
-          <button
-            onClick={() => onFinalize(parsedData)}
-            disabled={saving}
-            style={{ background:'var(--color-accent)', color:'var(--color-text-inverse)', padding:'12px 24px', borderRadius:12, fontWeight:600, fontSize:13, border:'none', cursor: saving ? 'wait' : 'pointer', width: '100%', opacity: saving ? 0.6 : 1 }}
-          >
-            {saving ? 'Saving…' : 'Save to Service History'}
-          </button>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+            Review the parsed details and adjust if needed.
+          </p>
+          <ReceiptForm
+            initialData={parsedData}
+            vehicles={vehicles}
+            activeVehicleId={activeVehicleId}
+            onSave={(patch) => onFinalize({ ...parsedData, ...patch })}
+            saving={saving}
+            saveLabel="Save to Service History"
+          />
         </div>
       )}
     </div>
@@ -264,6 +270,15 @@ function SignedInApp({ user, onSignOut }) {
     addRecord,
   } = useServiceRecords(activeVehicleId)
 
+  // Pending review records — household-scoped, separate from
+  // per-vehicle records since they may not be matched correctly yet.
+  const {
+    records: pendingRecords,
+    confirm: confirmPending,
+    update: updatePending,
+    dismiss: dismissPending,
+  } = usePendingRecords()
+
   function navigate(s) {
     setScreen(s)
     window.scrollTo(0, 0)
@@ -296,18 +311,32 @@ function SignedInApp({ user, onSignOut }) {
       alert('Add a vehicle first.')
       return
     }
-    // Dollars → cents. Parsed `cost` comes back as a string or number.
-    const costNum = parseFloat(String(parsedData.cost ?? '').replace(/[^0-9.]/g, ''))
-    const cost_cents = Number.isFinite(costNum) ? Math.round(costNum * 100) : null
+    // ReceiptForm passes back DB-shaped fields in the patch
+    // (cost_cents, mileage_at_service, service_date, vehicle_id),
+    // merged on top of the original parsedData. Prefer the patch
+    // values, fall back to re-deriving from raw parsed strings if
+    // the patch fields are missing for any reason.
 
-    // Mileage may arrive as "52,400" or similar
-    const mileageNum = parseInt(String(parsedData.mileage ?? '').replace(/[^0-9]/g, ''))
-    const mileage_at_service = Number.isFinite(mileageNum) ? mileageNum : null
+    const cost_cents =
+      parsedData.cost_cents ??
+      (() => {
+        const n = parseFloat(String(parsedData.cost ?? '').replace(/[^0-9.]/g, ''))
+        return Number.isFinite(n) ? Math.round(n * 100) : null
+      })()
+
+    const mileage_at_service =
+      parsedData.mileage_at_service ??
+      (() => {
+        const n = parseInt(String(parsedData.mileage ?? '').replace(/[^0-9]/g, ''))
+        return Number.isFinite(n) ? n : null
+      })()
+
+    const targetVehicleId = parsedData.vehicle_id || activeVehicleId
 
     const { error } = await addRecord({
       service_type: parsedData.service_type || 'Service',
       shop_name: parsedData.shop_name || null,
-      service_date: parsedData.date || null,
+      service_date: parsedData.service_date || parsedData.date || null,
       mileage_at_service,
       cost_cents,
       notes: parsedData.notes || null,
@@ -315,6 +344,9 @@ function SignedInApp({ user, onSignOut }) {
       raw_parsed_data: parsedData,
       source: 'upload',
       status: 'confirmed',
+      // If user reassigned via the dropdown, override the
+      // active-vehicle assignment that useServiceRecords would set.
+      ...(targetVehicleId !== activeVehicleId ? { vehicle_id: targetVehicleId } : {}),
     })
     if (error) {
       alert(`Could not save record: ${error.message}`)
@@ -421,6 +453,15 @@ function SignedInApp({ user, onSignOut }) {
           onNavigate={navigate}
           serviceRecords={serviceRecords}
           recordsLoading={recordsLoading}
+          pendingBanner={
+            <PendingReviewBanner
+              records={pendingRecords}
+              vehicles={vehicles}
+              onConfirm={confirmPending}
+              onUpdate={updatePending}
+              onDismiss={dismissPending}
+            />
+          }
         />
       )}
       {screen === 'schedule' && (
@@ -432,7 +473,14 @@ function SignedInApp({ user, onSignOut }) {
           recordsLoading={recordsLoading}
         />
       )}
-      {screen === 'import' && <ImportScreen onFinalize={handleFinalizeRecord} saving={recordSaving} />}
+      {screen === 'import' && (
+        <ImportScreen
+          onFinalize={handleFinalizeRecord}
+          saving={recordSaving}
+          vehicles={vehicles}
+          activeVehicleId={activeVehicleId}
+        />
+      )}
       {screen === 'defense' && <DefenseScreen />}
     </>
   )

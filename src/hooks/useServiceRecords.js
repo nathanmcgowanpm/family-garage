@@ -39,7 +39,8 @@ export function useServiceRecords(vehicleId) {
         .from('service_records')
         .select('*')
         .eq('vehicle_id', vehicleId)
-        .order('service_date', { ascending: false })
+        .eq('status', 'confirmed')
+        .order('service_date', { ascending: false })  
 
       if (cancelled) return
 

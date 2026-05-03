@@ -44,6 +44,7 @@ function DashboardScreen({
   onSwitchVehicle,
   onNavigate,
   serviceRecords = [],
+  pendingBanner = null,
 }) {
   const v = vehicles[activeVehicle]
   const hasRecords = serviceRecords.length > 0
@@ -168,7 +169,9 @@ function DashboardScreen({
           <StatPill label="Recalls" value="1" suffix="open" tone="danger" />
         </div>
       </div>
-
+{/* Pending review banner — only renders when records exist */}
+      {pendingBanner}
+      
       {/* Recall alert */}
       <div
         style={{
