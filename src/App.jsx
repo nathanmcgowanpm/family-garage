@@ -268,6 +268,7 @@ function SignedInApp({ user, onSignOut }) {
     loading: recordsLoading,
     saving: recordSaving,
     addRecord,
+    deleteRecord,
   } = useServiceRecords(activeVehicleId)
 
   // Pending review records — household-scoped, separate from
@@ -471,6 +472,7 @@ function SignedInApp({ user, onSignOut }) {
           onNavigate={navigate}
           serviceRecords={serviceRecords}
           recordsLoading={recordsLoading}
+          onDeleteRecord={deleteRecord}
         />
       )}
       {screen === 'import' && (

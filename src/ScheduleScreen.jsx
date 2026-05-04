@@ -11,11 +11,16 @@
  *
  * History:
  *   - Reverse-chronological list of service records
+ *   - Date is shown in the default (collapsed) row
+ *   - Click a card to expand: mileage, shop, notes, line items
+ *   - Trash icon on each card → confirm + hard delete
  *   - Empty state if no records yet
  *
  * Data:
  *   - Maintenance intervals + costs from src/data/maintenance-intervals.js
  *   - Service records from state (user's parsed receipts)
+ *   - DB columns: service_date, mileage_at_service, cost_cents
+ *     (the prototype's flat fields `date` / `mileage` / `cost` are gone)
  */
 
 import { useEffect, useState } from 'react'
@@ -50,6 +55,7 @@ export default function ScheduleScreen({
   activeVehicle,
   onNavigate,
   serviceRecords = [],
+  onDeleteRecord,
 }) {
   const v = vehicles[activeVehicle]
   const [tab, setTab] = useState('upcoming')
@@ -232,8 +238,8 @@ export default function ScheduleScreen({
             <EmptyHistoryState onNavigate={onNavigate} />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              {serviceRecords.map((r, i) => (
-                <HistoryRow key={i} record={r} />
+              {serviceRecords.map((r) => (
+                <HistoryRow key={r.id} record={r} onDelete={onDeleteRecord} />
               ))}
             </div>
           )}
@@ -450,52 +456,198 @@ function ServiceRow({ service, currentMileage }) {
   )
 }
 
-function HistoryRow({ record }) {
+// ─── History row ─────────────────────────────────────────────
+// - Default row shows: service_type, date, cost
+// - Tap to expand: mileage, shop, notes, line items
+// - Trash icon (always visible) → window.confirm + onDelete
+
+function HistoryRow({ record, onDelete }) {
+  const [expanded, setExpanded] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const dateStr = formatDate(record.service_date)
+  const mileageStr =
+    record.mileage_at_service != null
+      ? `${record.mileage_at_service.toLocaleString()} mi`
+      : null
+  const costStr =
+    record.cost_cents != null ? `$${(record.cost_cents / 100).toFixed(2)}` : null
+
+  async function handleDelete(e) {
+    e.stopPropagation() // don't toggle expand when clicking the trash
+    if (!onDelete) return
+
+    const summary = `${record.service_type || 'this service'}${dateStr ? ` from ${dateStr}` : ''}`
+    if (!window.confirm(`Delete ${summary}? This can't be undone.`)) return
+
+    setBusy(true)
+    const result = await onDelete(record.id)
+    setBusy(false)
+    if (result?.error) {
+      alert(`Could not delete: ${result.error.message}`)
+    }
+  }
+
+  const lineItems = Array.isArray(record.line_items) ? record.line_items : []
+
   return (
     <div
+      onClick={() => setExpanded((v) => !v)}
       style={{
         background: 'var(--color-bg-surface)',
         border: '1px solid var(--color-border-subtle)',
         borderRadius: 'var(--radius-md)',
         padding: 'var(--space-4)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        cursor: 'pointer',
+        opacity: busy ? 0.5 : 1,
+        transition: 'opacity 150ms',
       }}
     >
-      <div>
-        <p
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontWeight: 600,
-            fontSize: 'var(--text-base)',
-            margin: '0 0 2px',
-          }}
-        >
-          {record.service_type || 'Service'}
-        </p>
-        <p
-          style={{
-            fontSize: 'var(--text-xs)',
-            color: 'var(--color-text-tertiary)',
-            margin: 0,
-          }}
-        >
-          {record.shop_name || '—'} · {record.date || '—'}
-          {record.mileage ? ` · ${parseInt(record.mileage).toLocaleString()} mi` : ''}
-        </p>
-      </div>
+      {/* Top row: service + cost + trash */}
       <div
         style={{
-          fontFamily: 'var(--font-mono)',
-          fontWeight: 600,
-          fontSize: 'var(--text-base)',
-          color: 'var(--color-accent)',
-          fontVariantNumeric: 'tabular-nums',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 'var(--space-3)',
         }}
       >
-        {record.cost ? `$${parseFloat(record.cost).toFixed(2)}` : '—'}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontWeight: 600,
+              fontSize: 'var(--text-base)',
+              margin: '0 0 2px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {record.service_type || 'Service'}
+          </p>
+          <p
+            style={{
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-tertiary)',
+              margin: 0,
+            }}
+          >
+            {dateStr || 'No date'}
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            flexShrink: 0,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 600,
+              fontSize: 'var(--text-base)',
+              color: 'var(--color-accent)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {costStr || '—'}
+          </span>
+          <button
+            onClick={handleDelete}
+            disabled={busy}
+            title="Delete record"
+            aria-label="Delete record"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 4,
+              borderRadius: 'var(--radius-sm)',
+              cursor: busy ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-text-tertiary)',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-status-danger)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-tertiary)')}
+          >
+            <Icon name="delete_outline" style={{ fontSize: 18 }} />
+          </button>
+        </div>
       </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div
+          style={{
+            marginTop: 'var(--space-4)',
+            paddingTop: 'var(--space-4)',
+            borderTop: '1px solid var(--color-border-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-2)',
+          }}
+        >
+          <DetailRow label="Mileage" value={mileageStr || '—'} mono />
+          <DetailRow label="Shop" value={record.shop_name || '—'} />
+          {record.notes && <DetailRow label="Notes" value={record.notes} />}
+          {lineItems.length > 0 && (
+            <div style={{ marginTop: 'var(--space-2)' }}>
+              <span className="text-label" style={{ fontSize: 10, display: 'block', marginBottom: 6 }}>
+                Line items
+              </span>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {lineItems.map((item, idx) => (
+                  <li
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: 'var(--text-sm)',
+                      color: 'var(--color-text-secondary)',
+                    }}
+                  >
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.description || item.name || '—'}
+                    </span>
+                    {item.cost != null && (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, marginLeft: 'var(--space-3)' }}>
+                        ${parseFloat(item.cost).toFixed(2)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetailRow({ label, value, mono = false }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 'var(--space-3)' }}>
+      <span className="text-label" style={{ fontSize: 10 }}>
+        {label}
+      </span>
+      <span
+        style={{
+          fontFamily: mono ? 'var(--font-mono)' : 'var(--font-body)',
+          fontSize: 'var(--text-sm)',
+          color: 'var(--color-text-primary)',
+          fontVariantNumeric: mono ? 'tabular-nums' : 'normal',
+          textAlign: 'right',
+          minWidth: 0,
+        }}
+      >
+        {value}
+      </span>
     </div>
   )
 }
@@ -572,6 +724,18 @@ function EmptyHistoryState({ onNavigate }) {
 // ─── Helpers ──────────────────────────────────────────────────
 
 /**
+ * Format a service_date (YYYY-MM-DD or ISO timestamp) into something
+ * human-friendly without pulling in a date library. Falls back to the
+ * raw string if parsing fails.
+ */
+function formatDate(input) {
+  if (!input) return null
+  const d = new Date(input)
+  if (Number.isNaN(d.getTime())) return String(input)
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+/**
  * Rough matcher — turn parsed receipt records into a map of
  * maintenance item id → last serviced mileage.
  * This is stub logic for the prototype. Post-launch, services
@@ -596,7 +760,8 @@ function buildLastServicedMap(records) {
 
   for (const record of records) {
     const name = (record.service_type || '').toLowerCase()
-    const mileage = parseInt(record.mileage) || 0
+    // DB column is mileage_at_service (the prototype's `mileage` is gone)
+    const mileage = record.mileage_at_service ?? 0
     if (!mileage) continue
 
     for (const [id, terms] of Object.entries(keywords)) {
