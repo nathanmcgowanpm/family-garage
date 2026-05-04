@@ -280,6 +280,14 @@ function SignedInApp({ user, onSignOut }) {
     dismiss: dismissPending,
   } = usePendingRecords()
 
+  // Has the user successfully forwarded at least one receipt?
+  // We check both lists because a forwarded record could be in
+  // either the active vehicle's confirmed history OR still pending
+  // review across the household.
+  const hasUsedForwarding =
+    serviceRecords.some((r) => r.source === 'email_forward') ||
+    pendingRecords.some((r) => r.source === 'email_forward')
+
   function navigate(s) {
     setScreen(s)
     window.scrollTo(0, 0)
@@ -454,6 +462,7 @@ function SignedInApp({ user, onSignOut }) {
           onNavigate={navigate}
           serviceRecords={serviceRecords}
           recordsLoading={recordsLoading}
+          hasUsedForwarding={hasUsedForwarding}
           pendingBanner={
             <PendingReviewBanner
               records={pendingRecords}

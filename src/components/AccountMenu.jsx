@@ -3,17 +3,28 @@
  * -------------------------------
  * Shows:
  *   1. User email
- *   2. Forwarding address (with copy button)
+ *   2. Forwarding address — static apex `receipts@familygarage.ai`,
+ *      with copy button + help text explaining From-header matching
  *   3. Notification preferences (3 toggles, synced to user_profiles)
  *   4. "Manage vehicles" link (opens VehicleSheet via callback)
  *   5. Sign out
  *
  * Anchored to the right edge of the viewport. Closes on
  * outside-click or Escape.
+ *
+ * Note: the forwarding address is the same for every user. The
+ * Postmark webhook disambiguates by matching the inbound From:
+ * header to auth.users.email — so users must forward from their
+ * account email for records to land in their household.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+
+// Single shared forwarding address for the whole product.
+// Lives here as a module constant so both this menu and the
+// dashboard tip card stay in sync.
+export const FORWARDING_ADDRESS = 'receipts@familygarage.ai'
 
 function Icon({ name, fill = false, style = {} }) {
   return <span className={`msym ${fill ? 'msym-fill' : ''}`} style={style}>{name}</span>
@@ -22,10 +33,11 @@ function Icon({ name, fill = false, style = {} }) {
 export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles }) {
   const menuRef = useRef(null)
   const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [profileLoading, setProfileLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
-  // Load profile
+  // Load profile (only needed for notification toggles now that the
+  // forwarding address is no longer per-user)
   useEffect(() => {
     async function loadProfile() {
       const { data } = await supabase
@@ -34,7 +46,7 @@ export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles
         .eq('id', user.id)
         .single()
       if (data) setProfile(data)
-      setLoading(false)
+      setProfileLoading(false)
     }
     loadProfile()
   }, [user.id])
@@ -62,20 +74,14 @@ export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles
   }
 
   async function copyForwardingEmail() {
-    if (!profile?.forwarding_email_alias) return
-    const fullEmail = `${profile.forwarding_email_alias}@inbox.familygarage.ai`
     try {
-      await navigator.clipboard.writeText(fullEmail)
+      await navigator.clipboard.writeText(FORWARDING_ADDRESS)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       console.error('Clipboard failed', err)
     }
   }
-
-  const forwardingEmail = profile?.forwarding_email_alias
-    ? `${profile.forwarding_email_alias}@inbox.familygarage.ai`
-    : null
 
   return (
     <>
@@ -116,48 +122,60 @@ export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles
 
         {/* Forwarding address */}
         <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border-subtle)' }}>
-          <MonoLabel color="accent">Your forwarding address</MonoLabel>
-          {loading ? (
-            <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', marginTop: 8 }}>Loading…</div>
-          ) : forwardingEmail ? (
-            <>
-              <button
-                onClick={copyForwardingEmail}
-                style={{
-                  width: '100%',
-                  marginTop: 8,
-                  background: 'var(--color-bg-inset)',
-                  border: '1px solid var(--color-border-accent)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '10px 12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                }}
-              >
-                <Icon
-                  name={copied ? 'check_circle' : 'mail'}
-                  style={{ color: 'var(--color-accent)', fontSize: 18, flexShrink: 0 }}
-                />
-                <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-primary)', wordBreak: 'break-all' }}>
-                  {forwardingEmail}
-                </span>
-                <Icon
-                  name={copied ? 'done' : 'content_copy'}
-                  style={{ color: copied ? 'var(--color-accent)' : 'var(--color-text-tertiary)', fontSize: 16, flexShrink: 0 }}
-                />
-              </button>
-              <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1.4 }}>
-                Forward any service receipt to this address. We'll parse and add it automatically.
-              </p>
-            </>
-          ) : null}
+          <MonoLabel color="accent">Forward receipts</MonoLabel>
+
+          <button
+            onClick={copyForwardingEmail}
+            style={{
+              width: '100%',
+              marginTop: 8,
+              background: 'var(--color-bg-inset)',
+              border: '1px solid var(--color-border-accent)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 12px',
+              textAlign: 'left',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
+            <Icon
+              name={copied ? 'check_circle' : 'mail'}
+              style={{ color: 'var(--color-accent)', fontSize: 18, flexShrink: 0 }}
+            />
+            <span
+              style={{
+                flex: 1,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                color: 'var(--color-text-primary)',
+                wordBreak: 'break-all',
+              }}
+            >
+              {FORWARDING_ADDRESS}
+            </span>
+            <Icon
+              name={copied ? 'done' : 'content_copy'}
+              style={{
+                color: copied ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                fontSize: 16,
+                flexShrink: 0,
+              }}
+            />
+          </button>
+
+          <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+            Forward service receipts to this address — we'll parse them and queue
+            them for review on your dashboard.
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
+            Only forwards from <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>{user.email}</span> will be matched to your account.
+          </p>
         </div>
 
         {/* Notifications */}
-        {profile && (
+        {profileLoading ? null : profile && (
           <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border-subtle)' }}>
             <MonoLabel color="tertiary">Notifications</MonoLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 8 }}>

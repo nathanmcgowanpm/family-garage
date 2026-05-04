@@ -12,6 +12,9 @@
 import { useEffect, useState } from 'react'
 import FleetChipStrip from './components/FleetChipStrip'
 import MileageTape from './components/MileageTape'
+import { FORWARDING_ADDRESS } from './components/AccountMenu'
+
+const FORWARDING_TIP_DISMISSED_KEY = 'fg_forwarding_tip_dismissed'
 
 // Local Icon component — renders Material Symbols
 function Icon({ name, fill = false, className = '', style = {} }) {
@@ -45,6 +48,7 @@ function DashboardScreen({
   onNavigate,
   serviceRecords = [],
   pendingBanner = null,
+  hasUsedForwarding = false,
 }) {
   const v = vehicles[activeVehicle]
   const hasRecords = serviceRecords.length > 0
@@ -169,9 +173,10 @@ function DashboardScreen({
           <StatPill label="Recalls" value="1" suffix="open" tone="danger" />
         </div>
       </div>
-{/* Pending review banner — only renders when records exist */}
+
+      {/* Pending review banner — only renders when records exist */}
       {pendingBanner}
-      
+
       {/* Recall alert */}
       <div
         style={{
@@ -262,6 +267,11 @@ function DashboardScreen({
       ) : (
         <EmptyActivityState onNavigate={onNavigate} />
       )}
+
+      {/* Forwarding tip — shown to users who have records but haven't
+          forwarded yet, until they dismiss it. Hidden automatically once
+          they've forwarded a receipt at least once. */}
+      {hasRecords && !hasUsedForwarding && <ForwardingTipCard />}
 
       {/* Import CTA */}
       <button
@@ -432,7 +442,7 @@ function RecentActivity({ records, onNavigate }) {
                   margin: 0,
                 }}
               >
-                {r.shop_name || '—'} · {r.date || '—'}
+                {r.shop_name || '—'} · {formatDate(r.service_date) || '—'}
               </p>
             </div>
             <div
@@ -444,7 +454,7 @@ function RecentActivity({ records, onNavigate }) {
                 fontVariantNumeric: 'tabular-nums',
               }}
             >
-              {r.cost ? `$${parseFloat(r.cost).toFixed(2)}` : '—'}
+              {r.cost_cents != null ? `$${(r.cost_cents / 100).toFixed(2)}` : '—'}
             </div>
           </div>
         ))}
@@ -453,7 +463,22 @@ function RecentActivity({ records, onNavigate }) {
   )
 }
 
+// Empty-state for the activity section. Two parallel paths: tap to
+// import a receipt, OR forward an emailed receipt to the apex address.
 function EmptyActivityState({ onNavigate }) {
+  const [copied, setCopied] = useState(false)
+
+  async function copyForwardingEmail(e) {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(FORWARDING_ADDRESS)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Clipboard failed', err)
+    }
+  }
+
   return (
     <div
       style={{
@@ -461,64 +486,280 @@ function EmptyActivityState({ onNavigate }) {
         border: '1px dashed var(--color-border-default)',
         borderRadius: 'var(--radius-lg)',
         padding: 'var(--space-6)',
-        textAlign: 'center',
+      }}
+    >
+      <div style={{ textAlign: 'center', marginBottom: 'var(--space-5)' }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 'var(--radius-full)',
+            background: 'var(--color-accent-bg)',
+            border: '1px solid var(--color-border-accent)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto var(--space-3)',
+          }}
+        >
+          <Icon name="receipt_long" style={{ color: 'var(--color-accent)', fontSize: 20 }} />
+        </div>
+        <p
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 600,
+            fontSize: 'var(--text-base)',
+            margin: '0 0 4px',
+            color: 'var(--color-text-primary)',
+          }}
+        >
+          No service records yet
+        </p>
+        <p
+          style={{
+            fontSize: 'var(--text-sm)',
+            color: 'var(--color-text-secondary)',
+            margin: '0 auto',
+            maxWidth: 320,
+          }}
+        >
+          Start your maintenance ledger one of two ways:
+        </p>
+      </div>
+
+      {/* Two parallel paths */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+        {/* Option 1: import */}
+        <button
+          onClick={() => onNavigate('import')}
+          style={{
+            background: 'var(--color-accent)',
+            color: 'var(--color-text-inverse)',
+            padding: 'var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-3)',
+            textAlign: 'left',
+            boxShadow: 'var(--glow-accent-sm)',
+          }}
+        >
+          <Icon name="add_a_photo" style={{ fontSize: 22, flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <p style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-sm)', margin: '0 0 2px' }}>
+              Import a receipt
+            </p>
+            <p style={{ fontSize: 12, opacity: 0.85, margin: 0 }}>
+              Snap a photo or upload a PDF.
+            </p>
+          </div>
+          <Icon name="arrow_forward" style={{ fontSize: 18, flexShrink: 0 }} />
+        </button>
+
+        {/* OR separator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: '0 var(--space-2)' }}>
+          <div style={{ flex: 1, height: 1, background: 'var(--color-border-subtle)' }} />
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--color-text-tertiary)',
+              letterSpacing: '0.15em',
+              textTransform: 'uppercase',
+            }}
+          >
+            or
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'var(--color-border-subtle)' }} />
+        </div>
+
+        {/* Option 2: forward */}
+        <div
+          style={{
+            background: 'var(--color-bg-inset)',
+            border: '1px solid var(--color-border-subtle)',
+            padding: 'var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-3)',
+          }}
+        >
+          <Icon
+            name="forward_to_inbox"
+            style={{ color: 'var(--color-accent)', fontSize: 22, flexShrink: 0 }}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontWeight: 600,
+                fontSize: 'var(--text-sm)',
+                margin: '0 0 2px',
+                color: 'var(--color-text-primary)',
+              }}
+            >
+              Forward an email receipt
+            </p>
+            <p
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--color-text-secondary)',
+                margin: 0,
+                wordBreak: 'break-all',
+              }}
+            >
+              {FORWARDING_ADDRESS}
+            </p>
+          </div>
+          <button
+            onClick={copyForwardingEmail}
+            title="Copy address"
+            aria-label="Copy forwarding address"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--color-border-default)',
+              borderRadius: 'var(--radius-sm)',
+              padding: 6,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              color: copied ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+            }}
+          >
+            <Icon name={copied ? 'done' : 'content_copy'} style={{ fontSize: 16 }} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Tip card shown to users who already have records but haven't yet
+// used email forwarding. Dismissible (localStorage). Hidden upstream
+// once we detect a record with source='email_forward'.
+function ForwardingTipCard() {
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem(FORWARDING_TIP_DISMISSED_KEY) === '1'
+  })
+  const [copied, setCopied] = useState(false)
+
+  if (dismissed) return null
+
+  function dismiss(e) {
+    e.stopPropagation()
+    localStorage.setItem(FORWARDING_TIP_DISMISSED_KEY, '1')
+    setDismissed(true)
+  }
+
+  async function copyForwardingEmail(e) {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(FORWARDING_ADDRESS)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Clipboard failed', err)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: 'var(--color-bg-surface)',
+        border: '1px solid var(--color-border-subtle)',
+        borderRadius: 'var(--radius-lg)',
+        padding: 'var(--space-4)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 'var(--space-3)',
       }}
     >
       <div
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 'var(--radius-full)',
           background: 'var(--color-accent-bg)',
-          border: '1px solid var(--color-border-accent)',
+          padding: 'var(--space-2)',
+          borderRadius: 'var(--radius-md)',
+          flexShrink: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          margin: '0 auto var(--space-3)',
         }}
       >
-        <Icon name="receipt_long" style={{ color: 'var(--color-accent)', fontSize: 20 }} />
+        <Icon name="forward_to_inbox" style={{ color: 'var(--color-accent)', fontSize: 20 }} />
       </div>
-      <p
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontWeight: 600,
-          fontSize: 'var(--text-base)',
-          margin: '0 0 4px',
-          color: 'var(--color-text-primary)',
-        }}
-      >
-        No service records yet
-      </p>
-      <p
-        style={{
-          fontSize: 'var(--text-sm)',
-          color: 'var(--color-text-secondary)',
-          margin: '0 0 var(--space-4)',
-          maxWidth: 280,
-          marginLeft: 'auto',
-          marginRight: 'auto',
-        }}
-      >
-        Import a receipt to start your maintenance ledger.
-      </p>
-      <button
-        onClick={() => onNavigate('import')}
-        style={{
-          background: 'var(--color-accent)',
-          color: 'var(--color-text-inverse)',
-          padding: '10px 20px',
-          borderRadius: 'var(--radius-md)',
-          fontFamily: 'var(--font-body)',
-          fontWeight: 600,
-          fontSize: 'var(--text-sm)',
-          border: 'none',
-          cursor: 'pointer',
-          boxShadow: 'var(--glow-accent-sm)',
-        }}
-      >
-        Import first receipt
-      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 600,
+            fontSize: 'var(--text-sm)',
+            margin: '0 0 4px',
+            color: 'var(--color-text-primary)',
+          }}
+        >
+          Skip the upload — forward email receipts
+        </p>
+        <p
+          style={{
+            fontSize: 12,
+            color: 'var(--color-text-secondary)',
+            margin: '0 0 var(--space-2)',
+            lineHeight: 1.45,
+          }}
+        >
+          Send service emails to{' '}
+          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-primary)' }}>
+            {FORWARDING_ADDRESS}
+          </span>
+          . We'll parse them and queue for review.
+        </p>
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <button
+            onClick={copyForwardingEmail}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--color-border-default)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '6px 10px',
+              fontSize: 11,
+              fontWeight: 600,
+              color: copied ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            <Icon name={copied ? 'done' : 'content_copy'} style={{ fontSize: 14 }} />
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+          <button
+            onClick={dismiss}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '6px 10px',
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--color-text-tertiary)',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -534,6 +775,13 @@ function extractYear(name) {
   const match = name.match(/\b(19|20)\d{2}\b/)
   if (!match) return ''
   return `'${match[0].slice(2)}`
+}
+
+function formatDate(input) {
+  if (!input) return null
+  const d = new Date(input)
+  if (Number.isNaN(d.getTime())) return String(input)
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 export default DashboardScreen
