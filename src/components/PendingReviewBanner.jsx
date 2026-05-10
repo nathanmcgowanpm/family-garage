@@ -225,6 +225,37 @@ function ReviewCard({ record, vehicles, onConfirm, onUpdate, onDismiss }) {
           >
             {vehicleLabel} · {record.shop_name || '—'} · {dateLabel}
           </p>
+          {record.match_reason && (
+            <p
+              style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-text-tertiary)',
+                fontStyle: 'italic',
+                margin: '2px 0 0',
+              }}
+            >
+              {record.match_reason}
+            </p>
+          )}
+          {record.match_confidence === 'low' && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                marginTop: 6,
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-sm, 4px)',
+                border: '1px solid var(--color-status-warning)',
+                color: 'var(--color-status-warning)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+              }}
+            >
+              <Icon name="warning" style={{ fontSize: 12, color: 'var(--color-status-warning)' }} />
+              Low confidence match — please verify vehicle.
+            </div>
+          )}
         </div>
         {dollars && (
           <div

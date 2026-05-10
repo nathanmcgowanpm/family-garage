@@ -127,17 +127,17 @@ if (providedToken !== expectedSecret) {
 
   const householdIds = memberships.map((m) => m.household_id)
 
-  // Find the most recently updated vehicle in any of the user's households.
-  // Future: match make/model/VIN from receipt text against vehicles list.
-  const { data: vehicles, error: vehiclesError } = await supabaseAdmin
+  // Fetch ALL active vehicles in the household so Claude can pick the
+  // best match per receipt. Ordered by updated_at desc so vehicles[0]
+  // is the fallback when matching returns an invalid id.
+  const { data: vehicleRows, error: vehiclesError } = await supabaseAdmin
     .from('vehicles')
-    .select('id, household_id')
+    .select('id, year, make, model, trim, nickname, vin, license_plate, current_mileage')
     .in('household_id', householdIds)
     .is('archived_at', null)
     .order('updated_at', { ascending: false })
-    .limit(1)
 
-  if (vehiclesError || !vehicles?.length) {
+  if (vehiclesError || !vehicleRows?.length) {
     console.error('No vehicle found for user households', userId, vehiclesError)
     await supabaseAdmin.from('unmatched_emails').insert({
       from_address: fromAddress,
@@ -153,7 +153,21 @@ if (providedToken !== expectedSecret) {
     })
     return res.status(200).json({ ok: true, matched: true, parsed: 0, reason: 'no_vehicle' })
   }
-  const vehicleId = vehicles[0].id
+
+  // Map current_mileage → last_known_mileage for the prompt shape.
+  const vehiclesForMatching = vehicleRows.map((v) => ({
+    id: v.id,
+    year: v.year,
+    make: v.make,
+    model: v.model,
+    trim: v.trim,
+    nickname: v.nickname,
+    vin: v.vin,
+    license_plate: v.license_plate,
+    last_known_mileage: v.current_mileage,
+  }))
+  const validVehicleIds = new Set(vehicleRows.map((v) => v.id))
+  const fallbackVehicleId = vehicleRows[0].id
 
   // Parse each attachment with Claude Haiku, insert as service_record
   const apiKey = process.env.ANTHROPIC_KEY
@@ -168,6 +182,7 @@ if (providedToken !== expectedSecret) {
       const requestBody = buildReceiptParseRequest({
         base64: attachment.Content,
         mediaType: attachment.ContentType,
+        vehicles: vehiclesForMatching,
       })
 
       const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -189,11 +204,25 @@ if (providedToken !== expectedSecret) {
       const data = await anthropicResponse.json()
       const parsed = extractParsedReceipt(data)
 
+      // Matching fields are duplicated: dedicated columns are canonical;
+      // raw_parsed_data preserves Claude's original response for auditing.
+      // If Claude hallucinated a uuid not in the household, the dedicated
+      // columns get the corrected values while raw_parsed_data keeps the
+      // hallucinated id so we can see what Claude returned AND what we did.
+      let matchedVehicleId = parsed.matched_vehicle_id
+      let matchConfidence = parsed.match_confidence ?? null
+      let matchReason = parsed.match_reason ?? null
+      if (!matchedVehicleId || !validVehicleIds.has(matchedVehicleId)) {
+        matchedVehicleId = fallbackVehicleId
+        matchConfidence = 'low'
+        matchReason = 'Matching returned invalid vehicle id; defaulted to most recent.'
+      }
+
       const { error: recordError } = await supabaseAdmin
         .from('service_records')
         .insert({
           created_by: userId,
-          vehicle_id: vehicleId,
+          vehicle_id: matchedVehicleId,
           service_type: parsed.service_type || null,
           shop_name: parsed.shop_name || null,
           service_date: parsed.date || null,
@@ -212,6 +241,8 @@ if (providedToken !== expectedSecret) {
           notes: parsed.notes || null,
           source: 'email_forward',
           status: 'pending_review',
+          match_confidence: matchConfidence,
+          match_reason: matchReason,
         })
 
       if (recordError) {
