@@ -1,14 +1,7 @@
-// ⚠️ DUPLICATED FILE — this exists in two places due to bundler constraints:
-//   - lib/receiptParsing.js          (used by Vite/frontend via src/App.jsx)
-//   - api/_lib/receiptParsing.js     (used by Vercel serverless functions)
-// If you change one, change the other.
-
 // Shared receipt-parsing logic.
-// Used by both the web upload flow (api/parse-receipt.js called from src/App.jsx)
-// and the email-forwarding flow (api/inbound-email.js).
-//
-// Single source of truth for the prompt, model, and expected JSON shape.
-// Update the prompt here once and both flows pick it up.
+// Single source of truth — imported by both the frontend (src/App.jsx)
+// and serverless functions (api/parse-receipt.js, api/inbound-email.js).
+// Vercel includes this directory with each function via vercel.json.
 
 export const RECEIPT_PARSE_MODEL = 'claude-haiku-4-5-20251001'
 export const RECEIPT_PARSE_MAX_TOKENS = 1024

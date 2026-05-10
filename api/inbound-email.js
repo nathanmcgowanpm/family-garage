@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { buildReceiptParseRequest, extractParsedReceipt } from './_lib/receiptParsing.js'
+import { buildReceiptParseRequest, extractParsedReceipt } from '../shared/receiptParsing.js'
 
 // Initialize Supabase admin client (bypasses RLS via service role key).
 const supabaseAdmin = createClient(
