@@ -1,6 +1,7 @@
 // Shared receipt-parsing logic.
-// Single source of truth — imported by both the frontend (src/App.jsx)
-// and serverless functions (api/parse-receipt.js, api/inbound-email.js).
+// Imported by serverless functions only (api/parse-receipt.js, api/inbound-email.js).
+// The frontend POSTs {base64, mediaType} to /api/parse-receipt and receives
+// the already-parsed object — it has no knowledge of Anthropic or the prompt.
 // Vercel includes this directory with each function via vercel.json.
 
 export const RECEIPT_PARSE_MODEL = 'claude-haiku-4-5-20251001'

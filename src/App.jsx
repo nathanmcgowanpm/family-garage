@@ -7,7 +7,6 @@ import VehicleSheet from './components/VehicleSheet'
 import AppShell from './components/AppShell'
 import PendingReviewBanner from './components/PendingReviewBanner'
 import ReceiptForm from './components/ReceiptForm'
-import { buildReceiptParseRequest, extractParsedReceipt } from '../shared/receiptParsing'
 import { DashboardSkeleton } from './components/Skeletons'
 import { useAuth } from './hooks/useAuth'
 import { useVehicles } from './hooks/useVehicles'
@@ -145,11 +144,10 @@ function ImportScreen({ onFinalize, saving, vehicles, activeVehicleId }) {
       const response = await fetch('/api/parse-receipt', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(buildReceiptParseRequest({ base64, mediaType })),
+        body: JSON.stringify({ base64, mediaType }),
       })
       if (!response.ok) throw new Error(`API error ${response.status}`)
-      const data = await response.json()
-      const parsed = extractParsedReceipt(data)
+      const parsed = await response.json()
       setParsedData((prev) => ({ ...prev, ...parsed }))
       setParseState('done')
     } catch (err) {

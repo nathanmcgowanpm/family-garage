@@ -1,14 +1,19 @@
+import { buildReceiptParseRequest, extractParsedReceipt } from '../shared/receiptParsing.js'
+
 export default async function handler(req, res) {
-  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
   const apiKey = process.env.ANTHROPIC_KEY
-
   if (!apiKey) {
     console.error('ANTHROPIC_KEY not set in environment')
     return res.status(500).json({ error: 'Server configuration error' })
+  }
+
+  const { base64, mediaType } = req.body || {}
+  if (!base64 || !mediaType) {
+    return res.status(400).json({ error: 'Missing base64 or mediaType' })
   }
 
   try {
@@ -19,24 +24,24 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json',
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(buildReceiptParseRequest({ base64, mediaType })),
     })
 
-    const data = await response.json()
-
     if (!response.ok) {
-      console.error('Anthropic error:', data)
-      return res.status(response.status).json(data)
+      const errBody = await response.text()
+      console.error(`Anthropic error ${response.status}:`, errBody)
+      return res.status(500).json({ error: 'Parsing failed' })
     }
 
-    return res.status(200).json(data)
+    const data = await response.json()
+    const parsed = extractParsedReceipt(data)
+    return res.status(200).json(parsed)
   } catch (err) {
     console.error('Handler error:', err)
-    return res.status(500).json({ error: err.message })
+    return res.status(500).json({ error: 'Parsing failed' })
   }
 }
 
-// Vercel config: allow large request bodies (receipts can be big images/PDFs)
 export const config = {
   api: {
     bodyParser: {
