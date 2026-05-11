@@ -75,18 +75,14 @@ if (providedToken !== expectedSecret) {
       })
     if (insertError) {
       console.error('Failed to insert unmatched_email', insertError)
-    } else {
-      console.log(`Stored unmatched email from ${fromAddress}`)
     }
     return res.status(200).json({ ok: true, matched: false })
   }
 
   const userId = matchedUser.id
-  console.log(`Matched user ${userId} for ${fromAddress}`)
 
   const parseable = attachments.filter((a) => PARSEABLE_MIME_TYPES.has(a.ContentType))
   if (parseable.length === 0) {
-    console.log(`No parseable attachments from ${fromAddress}`)
     await supabaseAdmin.from('unmatched_emails').insert({
       from_address: fromAddress,
       from_name: fromName,
@@ -213,6 +209,7 @@ if (providedToken !== expectedSecret) {
       let matchConfidence = parsed.match_confidence ?? null
       let matchReason = parsed.match_reason ?? null
       if (!matchedVehicleId || !validVehicleIds.has(matchedVehicleId)) {
+        console.warn(`Match override for ${attachment.Name}: Claude returned invalid vehicle id ${matchedVehicleId}; defaulted to ${fallbackVehicleId}`)
         matchedVehicleId = fallbackVehicleId
         matchConfidence = 'low'
         matchReason = 'Matching returned invalid vehicle id; defaulted to most recent.'
