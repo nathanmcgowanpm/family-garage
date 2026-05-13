@@ -7,6 +7,7 @@ import VehicleSheet from './components/VehicleSheet'
 import AppShell from './components/AppShell'
 import PendingReviewBanner from './components/PendingReviewBanner'
 import ReceiptForm from './components/ReceiptForm'
+import { ReceiptPreview, ReceiptFormSkeleton } from './components/ReceiptParsingSkeleton'
 import { DashboardSkeleton } from './components/Skeletons'
 import { useAuth } from './hooks/useAuth'
 import { useVehicles } from './hooks/useVehicles'
@@ -179,23 +180,34 @@ function ImportScreen({ onFinalize, saving, vehicles, activeVehicleId }) {
           )}
         </div>
       )}
-      {parseState === 'parsing' && <p style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: 40 }}>Parsing receipt...</p>}
-      {parseState === 'error' && <p style={{ color: 'var(--color-status-danger)', padding: 20 }}>Error: {errorMsg} <button onClick={resetUpload}>Try again</button></p>}
-      {parseState === 'done' && parsedData && (
-        <div style={{ marginTop: 16 }}>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-            Review the parsed details and adjust if needed.
-          </p>
-          <ReceiptForm
-            initialData={parsedData}
-            vehicles={vehicles}
-            activeVehicleId={activeVehicleId}
-            onSave={(patch) => onFinalize({ ...parsedData, ...patch })}
-            saving={saving}
-            saveLabel="Save to Service History"
+      {(parseState === 'parsing' || parseState === 'done') && parsedData && (
+        <div className="fg-parse-grid">
+          <ReceiptPreview
+            parsedData={parsedData}
+            caption={parseState === 'parsing' ? 'Parsing your receipt...' : null}
           />
+          <div style={{ minWidth: 0 }}>
+            {parseState === 'parsing' ? (
+              <ReceiptFormSkeleton />
+            ) : (
+              <div className="fg-form-fade-in">
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+                  Review the parsed details and adjust if needed.
+                </p>
+                <ReceiptForm
+                  initialData={parsedData}
+                  vehicles={vehicles}
+                  activeVehicleId={activeVehicleId}
+                  onSave={(patch) => onFinalize({ ...parsedData, ...patch })}
+                  saving={saving}
+                  saveLabel="Save to Service History"
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
+      {parseState === 'error' && <p style={{ color: 'var(--color-status-danger)', padding: 20 }}>Error: {errorMsg} <button onClick={resetUpload}>Try again</button></p>}
     </div>
   )
 }
