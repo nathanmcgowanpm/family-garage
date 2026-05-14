@@ -9,7 +9,9 @@ export const RECEIPT_PARSE_MAX_TOKENS = 1024
 
 export const RECEIPT_PARSE_PROMPT =
   `Parse this vehicle service receipt. Respond ONLY with JSON: ` +
-  `{"service_type": "...", "shop_name": "...", "date": "...", "mileage": "...", "cost": "...", "line_items": [], "notes": "..."}. ` +
+  `{"service_type": "...", "shop_name": "...", "date": "YYYY-MM-DD", "mileage": "...", "cost": "...", "line_items": [], "notes": "..."}. ` +
+  `Convert any date format on the receipt to ISO 8601 (YYYY-MM-DD). ` +
+  `If the year is shown as 2 digits (e.g. '01/19/26'), interpret it as 20XX. ` +
   `Use null for missing.`
 
 /**
@@ -33,8 +35,10 @@ function buildMatchingPrompt(vehicles) {
     `Parse the receipt AND match it to one of the listed vehicles.\n\n` +
     `Household vehicles:\n${lines}\n\n` +
     `Respond ONLY with JSON: ` +
-    `{"service_type": "...", "shop_name": "...", "date": "...", "mileage": "...", "cost": "...", "line_items": [], "notes": "...", ` +
+    `{"service_type": "...", "shop_name": "...", "date": "YYYY-MM-DD", "mileage": "...", "cost": "...", "line_items": [], "notes": "...", ` +
     `"matched_vehicle_id": "...", "match_confidence": "high"|"medium"|"low", "match_reason": "one short sentence"}. ` +
+    `Convert any date format on the receipt to ISO 8601 (YYYY-MM-DD). ` +
+    `If the year is shown as 2 digits (e.g. '01/19/26'), interpret it as 20XX. ` +
     `Use null for any missing receipt field.\n\n` +
     `Matching rules:\n` +
     `- high: receipt text contains a VIN matching a vehicle's VIN, OR a license plate matching, OR an explicit year+make+model that uniquely matches one vehicle.\n` +
