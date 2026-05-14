@@ -117,3 +117,40 @@
 .technical-card:hover {
   border-color: var(--color-border-default);
 }
+
+/* ============================================================
+   DATE INPUT — dark-theme polish for <input type="date">
+   ============================================================
+   The native popup is not styled (out of scope). These rules only
+   touch the input field: focus state, calendar icon visibility on
+   dark backgrounds, and a dark color-scheme hint so the popup the
+   browser opens itself looks right. Firefox does not expose the
+   webkit pseudo-elements; on Firefox the date input picks up the
+   inline border/bg/font/color and the focus rule below, but the
+   calendar glyph keeps its system default. Mobile renders a native
+   sheet — input-field styling carries through, popup is the OS's.
+*/
+
+input[type="date"] {
+  color-scheme: dark;
+}
+
+input[type="date"]:focus {
+  border-color: var(--color-border-accent-strong);
+  box-shadow: var(--glow-accent-sm);
+}
+
+/* Default calendar glyph is dark — invert + dim it so it reads as a
+   muted icon against the dark input bg, then brighten on hover/focus
+   for a clear "interactive" affordance. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 150ms;
+}
+
+input[type="date"]:hover::-webkit-calendar-picker-indicator,
+input[type="date"]:focus::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
