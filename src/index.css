@@ -12,6 +12,11 @@
 /* Design tokens (must come before Tailwind so utility classes can reference them) */
 @import './styles/tokens.css';
 
+/* v2 Arctic Signal tokens — additive; imported after legacy tokens so newer
+   variable definitions (and the body rule) take precedence where they collide.
+   See src/design-system/reference/DESIGN_SPEC.md for the source of truth. */
+@import './design-system/tokens.css';
+
 /* Tailwind */
 @tailwind base;
 @tailwind components;

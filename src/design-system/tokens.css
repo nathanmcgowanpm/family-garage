@@ -1,0 +1,118 @@
+/**
+ * Family Garage v2 — Arctic Signal design tokens
+ * -----------------------------------------------
+ * Source of truth: src/design-system/reference/DESIGN_SPEC.md (lines 47–143).
+ *
+ * CSS variables are the canonical token form. Tailwind references them via
+ * tailwind.config.js, so a class like `bg-primary` and an inline
+ * `style={{ background: 'var(--color-primary)' }}` always resolve to the same
+ * value.
+ *
+ * Phase 0: this file lives alongside (not replacing) src/styles/tokens.css.
+ * Existing screens use the old `--color-bg-*` / `--color-accent` / etc.
+ * tokens. New design-system components use the tokens below.
+ */
+
+:root {
+  /* ============================================================
+     COLOR — Backgrounds
+     ============================================================ */
+  --color-ink:       #0A0C0E;   /* Page / screen background */
+  --color-surface:   #131619;   /* Card background, bottom sheet */
+  --color-surface-2: #1C2024;   /* Nested card, input field */
+  --color-surface-3: #262B31;   /* Highest elevation surface */
+
+  /* ============================================================
+     COLOR — Lines / Dividers (cool-tinted alphas, not neutral)
+     ============================================================ */
+  --color-line:   rgba(120, 200, 255, 0.06);   /* Subtle divider */
+  --color-line-2: rgba(120, 200, 255, 0.14);   /* Standard border */
+  --color-line-3: rgba(120, 200, 255, 0.22);   /* Emphasized border */
+
+  /* ============================================================
+     COLOR — Text
+     ============================================================ */
+  --color-text:      #F5F7FA;                    /* Primary text */
+  --color-text-dim:  rgba(245, 247, 250, 0.62);  /* Secondary text */
+  --color-text-mute: rgba(245, 247, 250, 0.36);  /* Placeholder / caption */
+
+  /* ============================================================
+     COLOR — Primary accent (Electric cyan)
+     The whole identity rides on this exact value.
+     ============================================================ */
+  --color-primary:      #3DD6FF;                  /* Electric cyan */
+  --color-primary-dim:  rgba(61, 214, 255, 0.12); /* Tinted background */
+  --color-primary-line: rgba(61, 214, 255, 0.36); /* Tinted border */
+
+  /* ============================================================
+     COLOR — Semantic
+     ============================================================ */
+  --color-go:     #6DFFB0;   /* Confirmed / synced / success */
+  --color-signal: #FFE15D;   /* Warning / due soon / review */
+  --color-danger: #FF4D6D;   /* Overdue / recall / urgent */
+
+  /* ============================================================
+     GRADIENTS
+     ============================================================ */
+  --gradient-primary-button: linear-gradient(180deg, #5EE2FF 0%, #3DD6FF 100%);
+  --gradient-tab-bar:        linear-gradient(to top, #0A0C0E 60%, rgba(10, 12, 14, 0.8));
+
+  /* ============================================================
+     SHADOWS — Glow effects are signature; don't flatten them.
+     ============================================================ */
+  --shadow-primary-button: 0 8px 24px rgba(61, 214, 255, 0.3),
+                           inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  --shadow-primary-glow:   0 0 8px #3DD6FF;
+  --shadow-go-glow:        0 0 8px #6DFFB0;
+  --shadow-fab:            0 8px 20px rgba(61, 214, 255, 0.4),
+                           inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  --shadow-bounding-box:   0 0 20px rgba(61, 214, 255, 0.4),
+                           inset 0 0 20px rgba(61, 214, 255, 0.13);
+
+  /* ============================================================
+     SPACING — Aligned to the DESIGN_SPEC scale
+     ============================================================ */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+
+  /* ============================================================
+     BORDER RADIUS
+     ============================================================ */
+  --radius-sm:   8px;    /* small chip, mode pill, toast */
+  --radius-md:   12px;   /* standard card */
+  --radius-lg:   14px;   /* fleet chip, FAB */
+  --radius-xl:   18px;   /* hero card */
+  --radius-2xl:  20px;   /* screen-level card / viewfinder */
+  --radius-pill: 36px;   /* avatar / dot indicators */
+
+  /* ============================================================
+     TYPOGRAPHY — Families
+     Three roles. Mono is mandatory for all tabular numerics.
+     NOTE: these names collide with src/styles/tokens.css. Because this
+     file is imported after, these values win. `--font-body` becomes
+     Inter (was Manrope); existing screens that style themselves
+     explicitly are unaffected, anything falling through to <body>
+     picks up Inter.
+     ============================================================ */
+  --font-display: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  --font-body:    'Inter', -apple-system, system-ui, sans-serif;
+}
+
+/* ============================================================
+   BASE — body styles per the v2 spec.
+   This rule loads after src/styles/tokens.css, so its values win
+   over the older `--color-bg-base` / `--color-text-primary` body
+   styling. Existing screens set their own background/colors via
+   inline styles, so they remain visually unchanged.
+   ============================================================ */
+body {
+  background: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
