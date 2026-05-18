@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react'
 import {
   computeServiceStatus,
   sortByUrgency,
+  buildLastServicedMap,
 } from './data/maintenance-intervals'
 
 function Icon({ name, fill = false, style = {} }) {
@@ -735,44 +736,5 @@ function formatDate(input) {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-/**
- * Rough matcher — turn parsed receipt records into a map of
- * maintenance item id → last serviced mileage.
- * This is stub logic for the prototype. Post-launch, services
- * should be tagged when imported instead of pattern-matched.
- */
-function buildLastServicedMap(records) {
-  const map = {}
-  const keywords = {
-    'oil-change': ['oil change', 'oil & filter', 'synthetic oil'],
-    'tire-rotation': ['tire rotation', 'tire rotate', 'rotate and balance'],
-    'brake-fluid-flush': ['brake fluid', 'brake flush'],
-    'engine-air-filter': ['engine air filter', 'air filter'],
-    'cabin-air-filter': ['cabin air', 'cabin filter'],
-    'coolant-flush': ['coolant', 'antifreeze'],
-    'transmission-fluid': ['transmission fluid', 'trans fluid'],
-    'wheel-alignment': ['alignment'],
-    'battery-test': ['battery test', 'battery check'],
-    'spark-plugs': ['spark plug'],
-    'wiper-blades': ['wiper', 'wiper blade'],
-    'brake-pads': ['brake pad'],
-  }
-
-  for (const record of records) {
-    const name = (record.service_type || '').toLowerCase()
-    // DB column is mileage_at_service (the prototype's `mileage` is gone)
-    const mileage = record.mileage_at_service ?? 0
-    if (!mileage) continue
-
-    for (const [id, terms] of Object.entries(keywords)) {
-      if (terms.some((t) => name.includes(t))) {
-        // Keep the highest (most recent) mileage
-        if (!map[id] || mileage > map[id]) {
-          map[id] = mileage
-        }
-      }
-    }
-  }
-
-  return map
-}
+// buildLastServicedMap is now in src/data/maintenance-intervals.js
+// so HomeScreen can share it (Phase 1 refactor — same logic, lifted).

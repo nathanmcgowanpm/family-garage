@@ -174,6 +174,46 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
 }
 
 /**
+ * Map service-record rows to a `{ itemId: lastMileage }` lookup so the
+ * predictor knows when each maintenance item was most recently
+ * performed. Matching is keyword-based (e.g. a record with
+ * `service_type` "Synthetic Oil Change" maps to `oil-change`). This is
+ * the same stub matcher the legacy ScheduleScreen used inline; lifted
+ * here so HomeScreen can reuse it without duplicating logic.
+ */
+const SERVICE_KEYWORDS = {
+  'oil-change':        ['oil change', 'oil & filter', 'synthetic oil'],
+  'tire-rotation':     ['tire rotation', 'tire rotate', 'rotate and balance'],
+  'brake-fluid-flush': ['brake fluid', 'brake flush'],
+  'engine-air-filter': ['engine air filter', 'air filter'],
+  'cabin-air-filter':  ['cabin air', 'cabin filter'],
+  'coolant-flush':     ['coolant', 'antifreeze'],
+  'transmission-fluid':['transmission fluid', 'trans fluid'],
+  'wheel-alignment':   ['alignment'],
+  'battery-test':      ['battery test', 'battery check'],
+  'spark-plugs':       ['spark plug'],
+  'wiper-blades':      ['wiper', 'wiper blade'],
+  'brake-pads':        ['brake pad'],
+}
+
+export function buildLastServicedMap(records = []) {
+  const map = {}
+  for (const record of records) {
+    const name = (record.service_type || '').toLowerCase()
+    const mileage = record.mileage_at_service ?? 0
+    if (!mileage) continue
+    for (const [id, terms] of Object.entries(SERVICE_KEYWORDS)) {
+      if (terms.some((t) => name.includes(t))) {
+        if (!map[id] || mileage > map[id]) {
+          map[id] = mileage
+        }
+      }
+    }
+  }
+  return map
+}
+
+/**
  * Sort helper — overdue first (most overdue first), then due-soon (closest first),
  * then upcoming (closest first).
  */
