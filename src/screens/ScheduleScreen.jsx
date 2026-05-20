@@ -16,6 +16,7 @@
  * (mpm derived from service-record dates) and the next-up promotion.
  */
 
+import { Fragment } from 'react'
 import AppShell from '../design-system/AppShell.jsx'
 import {
   Logo,
@@ -57,13 +58,20 @@ export default function ScheduleScreen({
 
   const filtered = computeServiceStatus(currentMileage, lastServicedMap)
     .filter((s) => {
-      if (s.status === 'overdue') return true
+      // Always include overdue (regardless of horizon) and no-baseline
+      // (no predicted mileage to compare against). Other statuses only
+      // surface if their predicted mileage lands inside the horizon.
+      if (s.status === 'overdue' || s.status === 'no-baseline') return true
       return Number.isFinite(s.nextDueAt) && s.nextDueAt <= horizonCutoff
     })
     .sort(sortByUrgency)
 
-  // Next-up promotion — first non-overdue in the sorted list
-  const nextUpIdx = filtered.findIndex((s) => s.status !== 'overdue')
+  // Next-up promotion — first item with a real prediction (due-soon or
+  // upcoming). Overdue and no-baseline are NOT eligible: overdue is
+  // already shouting, and no-baseline has no timing to anchor "next".
+  const nextUpIdx = filtered.findIndex(
+    (s) => s.status === 'due-soon' || s.status === 'upcoming',
+  )
 
   const stops = filtered.map((s, i) =>
     toViewModel(s, currentMileage, serviceRecords, i === nextUpIdx),
@@ -71,7 +79,8 @@ export default function ScheduleScreen({
 
   // Count by FINAL severity, not raw status — so the badge number
   // matches the count of yellow nodes the user actually sees rendered.
-  // (The promoted next-up is shown in primary cyan, not signal yellow.)
+  // (The promoted next-up is shown in primary cyan, not signal yellow;
+  // no-baseline never counts as due-soon.)
   const dueSoonCount = stops.filter((s) => s.severity === 'due-soon').length
 
   return (
@@ -163,18 +172,34 @@ export default function ScheduleScreen({
             style={{ margin: '18px 20px 0' }}
           >
             <TimelineRail />
-            {stops.map((stop, i) => (
-              <ServiceStop
-                key={stop.key}
-                predictedMileage={stop.predictedMileage}
-                predictedDate={stop.predictedDate}
-                dueText={stop.dueText}
-                serviceName={stop.serviceName}
-                intervalText={stop.intervalText}
-                severity={stop.severity}
-                isLast={i === stops.length - 1}
-              />
-            ))}
+            {stops.map((stop, i) => {
+              // Mark the transition into the no-baseline group so users
+              // understand why those cards look different. Also fires
+              // when the entire list is no-baseline (brand-new vehicle).
+              const isFirstNoBaseline =
+                stop.severity === 'no-baseline' &&
+                stops[i - 1]?.severity !== 'no-baseline'
+              return (
+                <Fragment key={stop.key}>
+                  {isFirstNoBaseline && (
+                    <div style={{ padding: '4px 0 12px 54px' }}>
+                      <MicroLabel color="var(--color-text-mute)">
+                        No history yet
+                      </MicroLabel>
+                    </div>
+                  )}
+                  <ServiceStop
+                    predictedMileage={stop.predictedMileage}
+                    predictedDate={stop.predictedDate}
+                    dueText={stop.dueText}
+                    serviceName={stop.serviceName}
+                    intervalText={stop.intervalText}
+                    severity={stop.severity}
+                    isLast={i === stops.length - 1}
+                  />
+                </Fragment>
+              )
+            })}
           </div>
         )}
 
@@ -197,6 +222,24 @@ export default function ScheduleScreen({
 // ─── View-model + helpers ─────────────────────────────────────────
 
 function toViewModel(s, currentMileage, serviceRecords, isNextUp) {
+  // No-baseline branch: no predicted mileage, no date, no timing math.
+  // The card communicates "we have no record — worth logging."
+  if (s.status === 'no-baseline') {
+    return {
+      key: s.id,
+      predictedMileage: null,
+      predictedDate: '',
+      dueText: 'WORTH LOGGING',
+      serviceName: s.name,
+      intervalText: s.intervalMiles
+        ? `Typically every ${s.intervalMiles.toLocaleString()} mi`
+        : s.intervalMonths
+          ? `Typically every ${s.intervalMonths} mo`
+          : 'Manufacturer recommended',
+      severity: 'no-baseline',
+    }
+  }
+
   const delta = s.milesUntilDue
   const isOverdue = s.status === 'overdue'
 

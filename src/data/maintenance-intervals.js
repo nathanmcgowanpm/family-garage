@@ -147,15 +147,33 @@ export const MAINTENANCE_ITEMS = [
 /**
  * Compute service status for a vehicle's current mileage.
  * Returns items with computed due state for sorting/filtering.
+ *
+ * Services with no logged history are reported as `'no-baseline'`,
+ * NOT `'overdue'`. Without a baseline mileage we don't know when the
+ * service was last performed, so calling it overdue would be a lie
+ * (a vehicle at 71,000 mi could have had its oil changed last week
+ * by a previous owner — we have no idea).
+ *
+ * The distinction is made by *key presence* in `lastServicedMap`, not
+ * truthiness — a record genuinely logged at mile 0 (rare but possible
+ * for first-owner brand-new vehicles) is still "has history".
  */
 export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
   return MAINTENANCE_ITEMS.map((item) => {
-    const lastServicedAt = lastServicedMap[item.id] || 0
-    const nextDueAt = lastServicedAt + (item.intervalMiles || Infinity)
-    const milesUntilDue = nextDueAt - currentMileage
+    const hasHistory = Object.prototype.hasOwnProperty.call(
+      lastServicedMap,
+      item.id,
+    )
+    const lastServicedAt = hasHistory ? lastServicedMap[item.id] : null
+    const nextDueAt = hasHistory
+      ? lastServicedAt + (item.intervalMiles || Infinity)
+      : null
+    const milesUntilDue = hasHistory ? nextDueAt - currentMileage : null
 
     let status
-    if (milesUntilDue < 0) {
+    if (!hasHistory) {
+      status = 'no-baseline'
+    } else if (milesUntilDue < 0) {
       status = 'overdue'
     } else if (milesUntilDue <= 1500) {
       status = 'due-soon'
@@ -165,6 +183,7 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
 
     return {
       ...item,
+      hasHistory,
       lastServicedAt,
       nextDueAt,
       milesUntilDue,
@@ -214,13 +233,18 @@ export function buildLastServicedMap(records = []) {
 }
 
 /**
- * Sort helper — overdue first (most overdue first), then due-soon (closest first),
- * then upcoming (closest first).
+ * Sort helper — overdue first (most overdue first), then due-soon
+ * (closest first), then upcoming (closest first), then no-baseline
+ * (informational, sorts to the bottom alphabetically by name since
+ * those items have `milesUntilDue === null`).
  */
 export function sortByUrgency(a, b) {
-  const order = { overdue: 0, 'due-soon': 1, upcoming: 2 }
+  const order = { overdue: 0, 'due-soon': 1, upcoming: 2, 'no-baseline': 3 }
   if (order[a.status] !== order[b.status]) {
     return order[a.status] - order[b.status]
+  }
+  if (a.status === 'no-baseline') {
+    return a.name.localeCompare(b.name)
   }
   // Within same status group, closest-due first
   return a.milesUntilDue - b.milesUntilDue

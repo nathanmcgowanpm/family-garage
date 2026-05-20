@@ -2,16 +2,22 @@
  * ServiceStop — single stop on the schedule timeline.
  *
  * Severity drives node + card color/glow. Card layout is consistent
- * across severities; only colors change.
+ * across severities; only colors and the top-row left cell change.
  *
  * Props:
- *   predictedMileage — number, the projected odometer reading when due
- *   predictedDate    — preformatted string like "~JAN 2027"
+ *   predictedMileage — number; if `severity==='no-baseline'`, ignored
+ *                      and "NO RECORD" is rendered instead
+ *   predictedDate    — preformatted string like "~JAN 2027"; pass ""
+ *                      for no-baseline so the date cell stays empty
  *   dueText          — preformatted string like "IN 800 MI" or
- *                      "OVERDUE BY 200 MI"
+ *                      "OVERDUE BY 200 MI" (for no-baseline this is
+ *                      typically "WORTH LOGGING")
  *   serviceName      — display name
- *   intervalText     — e.g. "Every 5,000 mi"
- *   severity         — 'overdue' | 'due-soon' | 'next-up' | 'coming-up'
+ *   intervalText     — e.g. "Every 5,000 mi" (for no-baseline pass
+ *                      "Typically every 5,000 mi" — the screen builds
+ *                      these strings, ServiceStop just renders them)
+ *   severity         — 'overdue' | 'due-soon' | 'next-up' |
+ *                      'coming-up' | 'no-baseline'
  *   isLast           — drops bottom padding on the final stop
  */
 
@@ -23,6 +29,7 @@ const SEVERITY = {
     iconStroke: 'var(--color-ink)',
     cardBorder: 'rgba(255, 77, 109, 0.4)',
     accent:     'var(--color-danger)',
+    dueTextColor: 'var(--color-danger)',
   },
   'due-soon': {
     nodeBg:     'var(--color-signal)',
@@ -31,6 +38,7 @@ const SEVERITY = {
     iconStroke: 'var(--color-ink)',
     cardBorder: 'rgba(255, 225, 93, 0.4)',
     accent:     'var(--color-signal)',
+    dueTextColor: 'var(--color-signal)',
   },
   'next-up': {
     nodeBg:     'var(--color-primary)',
@@ -39,6 +47,7 @@ const SEVERITY = {
     iconStroke: 'var(--color-ink)',
     cardBorder: 'var(--color-primary-line)',
     accent:     'var(--color-primary)',
+    dueTextColor: 'var(--color-primary)',
   },
   'coming-up': {
     nodeBg:     'var(--color-surface-2)',
@@ -47,6 +56,20 @@ const SEVERITY = {
     iconStroke: 'var(--color-text-dim)',
     cardBorder: 'var(--color-line)',
     accent:     'var(--color-text-mute)',
+    dueTextColor: 'var(--color-text-mute)',
+  },
+  // "No record yet" — calm, neutral, non-alarming. The most muted node
+  // treatment we have; even quieter than coming-up. The right-side
+  // duetext renders in text-dim instead of the node accent so the
+  // card doesn't accidentally pull the eye.
+  'no-baseline': {
+    nodeBg:     'var(--color-surface-2)',
+    nodeBorder: 'var(--color-line-2)',
+    nodeShadow: 'none',
+    iconStroke: 'var(--color-text-mute)',
+    cardBorder: 'var(--color-line)',
+    accent:     'var(--color-text-mute)',
+    dueTextColor: 'var(--color-text-dim)',
   },
 }
 
@@ -60,6 +83,7 @@ export default function ServiceStop({
   isLast = false,
 }) {
   const s = SEVERITY[severity] ?? SEVERITY['coming-up']
+  const isNoBaseline = severity === 'no-baseline'
 
   return (
     <div
@@ -84,22 +108,34 @@ export default function ServiceStop({
           }}
           aria-hidden="true"
         >
-          {/* Clock glyph */}
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <circle
-              cx="8"
-              cy="8"
-              r="5"
-              stroke={s.iconStroke}
-              strokeWidth="1.4"
-            />
-            <path
-              d="M8 5v3l2 1.5"
-              stroke={s.iconStroke}
-              strokeWidth="1.4"
-              strokeLinecap="round"
-            />
-          </svg>
+          {isNoBaseline ? (
+            /* Plus glyph — "you can log this" rather than "tick-tock" */
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M7 2.5v9M2.5 7h9"
+                stroke={s.iconStroke}
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            /* Clock glyph — implies timing */
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle
+                cx="8"
+                cy="8"
+                r="5"
+                stroke={s.iconStroke}
+                strokeWidth="1.4"
+              />
+              <path
+                d="M8 5v3l2 1.5"
+                stroke={s.iconStroke}
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
         </div>
       </div>
 
@@ -113,19 +149,33 @@ export default function ServiceStop({
           border: `1px solid ${s.cardBorder}`,
         }}
       >
-        {/* Top row: mileage marker (left) + predicted date (right) */}
+        {/* Top row: mileage marker / NO RECORD (left) + predicted date (right) */}
         <div className="flex items-baseline justify-between" style={{ gap: 8 }}>
-          <span
-            className="font-mono uppercase tabular-nums"
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: '1.4px',
-              color: s.accent,
-            }}
-          >
-            @ {Number.isFinite(predictedMileage) ? predictedMileage.toLocaleString() : '—'} MI
-          </span>
+          {isNoBaseline ? (
+            <span
+              className="font-mono uppercase"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '1.4px',
+                color: 'var(--color-text-mute)',
+              }}
+            >
+              NO RECORD
+            </span>
+          ) : (
+            <span
+              className="font-mono uppercase tabular-nums"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '1.4px',
+                color: s.accent,
+              }}
+            >
+              @ {Number.isFinite(predictedMileage) ? predictedMileage.toLocaleString() : '—'} MI
+            </span>
+          )}
           {predictedDate && (
             <span
               className="font-mono uppercase"
@@ -180,7 +230,7 @@ export default function ServiceStop({
               fontSize: 10,
               fontWeight: 600,
               letterSpacing: '1.2px',
-              color: s.accent,
+              color: s.dueTextColor,
             }}
           >
             {dueText}
