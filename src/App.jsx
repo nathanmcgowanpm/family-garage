@@ -1,6 +1,6 @@
 import HomeScreen from './screens/HomeScreen.jsx'
 import FleetScreen from './screens/FleetScreen.jsx'
-import ScheduleScreen from './ScheduleScreen'
+import ScheduleScreen from './screens/ScheduleScreen.jsx'
 import OnboardingScreen from './OnboardingScreen'
 import LoginScreen from './LoginScreen'
 import AccountMenu from './components/AccountMenu'
@@ -254,10 +254,11 @@ function SignedInApp({ user, onSignOut }) {
   // Service records scoped to the active vehicle
   const {
     records: serviceRecords,
-    loading: recordsLoading,
     saving: recordSaving,
     addRecord,
-    deleteRecord,
+    // `loading` and `deleteRecord` are currently unused. The History UI
+    // was dropped in Phase 2; the hook still exposes both for a future
+    // dedicated history view.
   } = useServiceRecords(activeVehicleId)
 
   // Pending review records — household-scoped, separate from
@@ -436,7 +437,8 @@ function SignedInApp({ user, onSignOut }) {
   // chrome entirely. Legacy screens keep the legacy AppShell wrapper, but
   // its mobile bottom-nav slot is now the v2 TabBar so the navigation
   // experience is consistent across the migration.
-  const isV2Screen = screen === 'home' || screen === 'fleet'
+  const isV2Screen =
+    screen === 'home' || screen === 'fleet' || screen === 'schedule'
 
   const sharedV2Props = {
     user,
@@ -472,7 +474,13 @@ function SignedInApp({ user, onSignOut }) {
           />
         )
       }
-      return <FleetScreen {...sharedV2Props} />
+      if (screen === 'fleet') return <FleetScreen {...sharedV2Props} />
+      return (
+        <ScheduleScreen
+          {...sharedV2Props}
+          serviceRecords={serviceRecords}
+        />
+      )
     }
 
     // Legacy screens — wrap in legacy AppShell + new TabBar
@@ -504,16 +512,6 @@ function SignedInApp({ user, onSignOut }) {
           />
         }
       >
-        {screen === 'schedule' && (
-          <ScheduleScreen
-            vehicles={vehicles}
-            activeVehicle={activeVehicle}
-            onNavigate={navigate}
-            serviceRecords={serviceRecords}
-            recordsLoading={recordsLoading}
-            onDeleteRecord={deleteRecord}
-          />
-        )}
         {screen === 'import' && (
           <ImportScreen
             onFinalize={handleFinalizeRecord}
