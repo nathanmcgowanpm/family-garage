@@ -11,6 +11,7 @@
  *     src/data/maintenance-intervals.js
  */
 
+import { useState } from 'react'
 import AppShell from '../design-system/AppShell.jsx'
 import {
   Logo,
@@ -24,6 +25,7 @@ import {
   TabBar,
   AvatarButton,
 } from '../design-system/primitives'
+import RecordSheet from './history/RecordSheet.jsx'
 import {
   buildLastServicedMap,
   computeServiceStatus,
@@ -41,10 +43,25 @@ export default function HomeScreen({
   onNavigate,
   onOpenAccount,
   serviceRecords = [],
+  onUpdateRecord,
+  onDeleteRecord,
   pendingBanner = null,
 }) {
   const v = vehicles[activeVehicle]
+  const activeVehicleId = v?.id ?? null
   const currentMileage = v?.milesRaw ?? 0
+
+  // Row→sheet wiring — mirrors HistoryScreen.jsx exactly. Storing the
+  // id (not the full record) means the sheet's content auto-refreshes
+  // when an optimistic edit lands; the post-delete cleanup uses the
+  // same queueMicrotask close-on-disappear pattern.
+  const [openRecordId, setOpenRecordId] = useState(null)
+  const openRecord = openRecordId
+    ? serviceRecords.find((r) => r.id === openRecordId) ?? null
+    : null
+  if (openRecordId && !openRecord) {
+    queueMicrotask(() => setOpenRecordId(null))
+  }
 
   // ─── Hero card derived values ──────────────────────────────
   const fullName = formatVehicleFullName(v)
@@ -256,7 +273,7 @@ export default function HomeScreen({
             <MicroLabel>Recent</MicroLabel>
             <button
               type="button"
-              onClick={() => onNavigate('schedule')}
+              onClick={() => onNavigate('history')}
               className="font-mono uppercase"
               style={{
                 fontSize: 9,
@@ -283,6 +300,7 @@ export default function HomeScreen({
                   costCents={r.cost_cents}
                   serviceDate={r.service_date}
                   hot={i === 0}
+                  onClick={r.id ? () => setOpenRecordId(r.id) : undefined}
                 />
               ))}
             </div>
@@ -313,6 +331,17 @@ export default function HomeScreen({
         onNext={() => onNavigate('schedule')}
         onMe={onOpenAccount}
       />
+
+      {openRecord && (
+        <RecordSheet
+          record={openRecord}
+          vehicles={vehicles}
+          activeVehicleId={activeVehicleId}
+          onUpdate={onUpdateRecord}
+          onDelete={onDeleteRecord}
+          onClose={() => setOpenRecordId(null)}
+        />
+      )}
     </>
   )
 }

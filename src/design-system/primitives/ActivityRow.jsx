@@ -38,14 +38,30 @@ export default function ActivityRow({
   costCents,
   serviceDate,
   hot = false,
+  onClick,
 }) {
+  // When `onClick` is provided we render as a real <button> so the row
+  // is tappable, keyboard-focusable, and announces as interactive. The
+  // visual chrome stays identical — same flex layout, same bottom
+  // border — we just strip the default button styling and add a
+  // pointer cursor. Mirrors the same pattern used by LedgerRow.
+  const interactive = typeof onClick === 'function'
+  const Tag = interactive ? 'button' : 'div'
+  const interactiveProps = interactive
+    ? { type: 'button', onClick }
+    : {}
+
   return (
-    <div
-      className="flex items-center"
+    <Tag
+      {...interactiveProps}
+      className="flex items-center w-full text-left"
       style={{
         gap: 12,
         padding: '12px 0',
+        background: 'transparent',
+        border: 'none',
         borderBottom: '1px solid var(--color-line)',
+        cursor: interactive ? 'pointer' : 'default',
       }}
     >
       {/* Dot — hot uses real glow via StatusDot, cold is a flat
@@ -124,6 +140,6 @@ export default function ActivityRow({
           {formatShortDate(serviceDate)}
         </div>
       </div>
-    </div>
+    </Tag>
   )
 }

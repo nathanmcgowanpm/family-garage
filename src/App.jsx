@@ -1,6 +1,7 @@
 import HomeScreen from './screens/HomeScreen.jsx'
 import FleetScreen from './screens/FleetScreen.jsx'
 import ScheduleScreen from './screens/ScheduleScreen.jsx'
+import HistoryScreen from './screens/HistoryScreen.jsx'
 import OnboardingScreen from './OnboardingScreen'
 import LoginScreen from './LoginScreen'
 import AccountMenu from './components/AccountMenu'
@@ -256,9 +257,8 @@ function SignedInApp({ user, onSignOut }) {
     records: serviceRecords,
     saving: recordSaving,
     addRecord,
-    // `loading` and `deleteRecord` are currently unused. The History UI
-    // was dropped in Phase 2; the hook still exposes both for a future
-    // dedicated history view.
+    updateRecord,
+    deleteRecord,
   } = useServiceRecords(activeVehicleId)
 
   // Pending review records — household-scoped, separate from
@@ -438,7 +438,10 @@ function SignedInApp({ user, onSignOut }) {
   // its mobile bottom-nav slot is now the v2 TabBar so the navigation
   // experience is consistent across the migration.
   const isV2Screen =
-    screen === 'home' || screen === 'fleet' || screen === 'schedule'
+    screen === 'home' ||
+    screen === 'fleet' ||
+    screen === 'schedule' ||
+    screen === 'history'
 
   const sharedV2Props = {
     user,
@@ -462,6 +465,8 @@ function SignedInApp({ user, onSignOut }) {
           <HomeScreen
             {...sharedV2Props}
             serviceRecords={serviceRecords}
+            onUpdateRecord={updateRecord}
+            onDeleteRecord={deleteRecord}
             pendingBanner={
               <PendingReviewBanner
                 records={pendingRecords}
@@ -475,10 +480,21 @@ function SignedInApp({ user, onSignOut }) {
         )
       }
       if (screen === 'fleet') return <FleetScreen {...sharedV2Props} />
+      if (screen === 'schedule') {
+        return (
+          <ScheduleScreen
+            {...sharedV2Props}
+            serviceRecords={serviceRecords}
+          />
+        )
+      }
+      // 'history'
       return (
-        <ScheduleScreen
+        <HistoryScreen
           {...sharedV2Props}
           serviceRecords={serviceRecords}
+          onUpdateRecord={updateRecord}
+          onDeleteRecord={deleteRecord}
         />
       )
     }
