@@ -71,6 +71,37 @@ const SEVERITY = {
     accent:     'var(--color-text-mute)',
     dueTextColor: 'var(--color-text-dim)',
   },
+  // Milestone: no history, past the service window. Amber, not red —
+  // we don't know it's actually overdue, only that the window has passed.
+  'likely-overdue': {
+    nodeBg:     'var(--color-signal)',
+    nodeBorder: 'var(--color-signal)',
+    nodeShadow: '0 0 12px var(--color-signal)',
+    iconStroke: 'var(--color-ink)',
+    cardBorder: 'rgba(255, 225, 93, 0.4)',
+    accent:     'var(--color-signal)',
+    dueTextColor: 'var(--color-signal)',
+  },
+  // Milestone: no history, currently inside the service window.
+  'consider-now': {
+    nodeBg:     'var(--color-signal)',
+    nodeBorder: 'var(--color-signal)',
+    nodeShadow: '0 0 12px var(--color-signal)',
+    iconStroke: 'var(--color-ink)',
+    cardBorder: 'rgba(255, 225, 93, 0.4)',
+    accent:     'var(--color-signal)',
+    dueTextColor: 'var(--color-signal)',
+  },
+  // Milestone: no history, car hasn't reached the window yet — informational.
+  'milestone-upcoming': {
+    nodeBg:     'var(--color-surface-2)',
+    nodeBorder: 'var(--color-line-3)',
+    nodeShadow: 'none',
+    iconStroke: 'var(--color-text-dim)',
+    cardBorder: 'var(--color-line)',
+    accent:     'var(--color-text-mute)',
+    dueTextColor: 'var(--color-text-mute)',
+  },
 }
 
 export default function ServiceStop({
@@ -84,6 +115,10 @@ export default function ServiceStop({
 }) {
   const s = SEVERITY[severity] ?? SEVERITY['coming-up']
   const isNoBaseline = severity === 'no-baseline'
+  const isMilestoneAdvisory =
+    severity === 'consider-now' ||
+    severity === 'likely-overdue' ||
+    severity === 'milestone-upcoming'
 
   return (
     <div
@@ -162,6 +197,19 @@ export default function ServiceStop({
               }}
             >
               NO RECORD
+            </span>
+          ) : isMilestoneAdvisory ? (
+            // Tilde prefix signals "typically around" — not a precise prediction
+            <span
+              className="font-mono uppercase tabular-nums"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '1.4px',
+                color: s.accent,
+              }}
+            >
+              ~{Number.isFinite(predictedMileage) ? predictedMileage.toLocaleString() : '—'} MI
             </span>
           ) : (
             <span

@@ -26,6 +26,7 @@ export const MAINTENANCE_ITEMS = [
     id: 'oil-change',
     name: 'Oil & Filter Change',
     icon: 'oil_barrel',
+    kind: 'recurring',
     intervalMiles: 5000,
     intervalMonths: 6,
     cost: { low: 40, high: 80, source: 'GreaseMonkey' },
@@ -36,6 +37,7 @@ export const MAINTENANCE_ITEMS = [
     id: 'tire-rotation',
     name: 'Tire Rotation',
     icon: 'tire_repair',
+    kind: 'recurring',
     intervalMiles: 6000,
     intervalMonths: 6,
     cost: { low: 20, high: 40, source: 'GreaseMonkey' },
@@ -46,6 +48,8 @@ export const MAINTENANCE_ITEMS = [
     id: 'brake-fluid-flush',
     name: 'Brake Fluid Flush',
     icon: 'water_drop',
+    kind: 'milestone',
+    dueAroundMiles: 30000,
     intervalMiles: 30000,
     intervalMonths: 36,
     cost: { low: 70, high: 100, source: 'GreaseMonkey' },
@@ -56,6 +60,7 @@ export const MAINTENANCE_ITEMS = [
     id: 'engine-air-filter',
     name: 'Engine Air Filter',
     icon: 'air',
+    kind: 'recurring',
     intervalMiles: 20000,
     intervalMonths: 24,
     cost: { low: 10, high: 30, source: 'GreaseMonkey' },
@@ -66,6 +71,7 @@ export const MAINTENANCE_ITEMS = [
     id: 'cabin-air-filter',
     name: 'Cabin Air Filter',
     icon: 'hvac',
+    kind: 'recurring',
     intervalMiles: 20000,
     intervalMonths: 24,
     cost: { low: 20, high: 40, source: 'GreaseMonkey' },
@@ -76,6 +82,8 @@ export const MAINTENANCE_ITEMS = [
     id: 'coolant-flush',
     name: 'Coolant Flush',
     icon: 'ac_unit',
+    kind: 'milestone',
+    dueAroundMiles: 60000,
     intervalMiles: 60000,
     intervalMonths: 60,
     cost: { low: 90, high: 150, source: 'GreaseMonkey' },
@@ -86,6 +94,8 @@ export const MAINTENANCE_ITEMS = [
     id: 'transmission-fluid',
     name: 'Transmission Fluid Service',
     icon: 'settings',
+    kind: 'milestone',
+    dueAroundMiles: 60000,
     intervalMiles: 60000,
     intervalMonths: 60,
     cost: { low: 120, high: 200, source: 'GreaseMonkey' },
@@ -96,6 +106,7 @@ export const MAINTENANCE_ITEMS = [
     id: 'wheel-alignment',
     name: 'Wheel Alignment Check',
     icon: 'straighten',
+    kind: 'recurring',
     intervalMiles: 12000,
     intervalMonths: 12,
     cost: { low: 80, high: 120, source: 'Industry average' },
@@ -106,6 +117,7 @@ export const MAINTENANCE_ITEMS = [
     id: 'battery-test',
     name: 'Battery Health Test',
     icon: 'battery_charging_full',
+    kind: 'recurring',
     intervalMiles: 15000,
     intervalMonths: 12,
     cost: { low: 0, high: 20, source: 'GreaseMonkey' },
@@ -116,6 +128,8 @@ export const MAINTENANCE_ITEMS = [
     id: 'spark-plugs',
     name: 'Spark Plug Replacement',
     icon: 'electrical_services',
+    kind: 'milestone',
+    dueAroundMiles: 60000,
     intervalMiles: 60000,
     intervalMonths: 60,
     cost: { low: 100, high: 250, source: 'GreaseMonkey' },
@@ -126,6 +140,7 @@ export const MAINTENANCE_ITEMS = [
     id: 'wiper-blades',
     name: 'Wiper Blade Replacement',
     icon: 'water_drop',
+    kind: 'recurring',
     intervalMiles: null,
     intervalMonths: 12,
     cost: { low: 20, high: 50, source: 'GreaseMonkey' },
@@ -136,6 +151,8 @@ export const MAINTENANCE_ITEMS = [
     id: 'brake-pads',
     name: 'Brake Pad Replacement',
     icon: 'disc_full',
+    kind: 'milestone',
+    dueAroundMiles: 40000,
     intervalMiles: 40000,
     intervalMonths: null,
     cost: { low: 150, high: 300, source: 'GreaseMonkey' },
@@ -143,6 +160,19 @@ export const MAINTENANCE_ITEMS = [
     category: 'wear',
   },
 ]
+
+/**
+ * How many miles before a milestone's lower window boundary the road-ahead
+ * starts surfacing it as `'milestone-upcoming'`. Below this lead distance
+ * the milestone is `'milestone-distant'` and filtered from the screen — it
+ * hasn't earned screen real estate yet.
+ *
+ * Example: coolant (dueAroundMiles: 60000, lowerBound: 48000) surfaces
+ * once currentMileage >= 38000 (48000 − 10000). Below 38k it's hidden.
+ *
+ * Tune this constant to change how early milestones appear.
+ */
+export const LEAD_MILES = 10000
 
 /**
  * Compute service status for a vehicle's current mileage.
@@ -157,6 +187,12 @@ export const MAINTENANCE_ITEMS = [
  * The distinction is made by *key presence* in `lastServicedMap`, not
  * truthiness — a record genuinely logged at mile 0 (rare but possible
  * for first-owner brand-new vehicles) is still "has history".
+ *
+ * Milestone status map (no history):
+ *   currentMileage < lowerBound − LEAD_MILES  → 'milestone-distant'   (hidden from road-ahead)
+ *   currentMileage < lowerBound               → 'milestone-upcoming'  (approaching window)
+ *   currentMileage <= upperBound              → 'consider-now'        (in window, amber)
+ *   currentMileage > upperBound               → 'likely-overdue'      (past window, amber)
  */
 export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
   return MAINTENANCE_ITEMS.map((item) => {
@@ -165,6 +201,54 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
       item.id,
     )
     const lastServicedAt = hasHistory ? lastServicedMap[item.id] : null
+
+    if (item.kind === 'milestone') {
+      const lowerBound = item.dueAroundMiles * 0.8
+      const upperBound = item.dueAroundMiles * 1.2
+
+      if (hasHistory) {
+        // Milestone with a logged service → predict next occurrence like recurring
+        const nextDueAt = lastServicedAt + item.intervalMiles
+        const milesUntilDue = nextDueAt - currentMileage
+        let status
+        if (milesUntilDue < 0) status = 'overdue'
+        else if (milesUntilDue <= 1500) status = 'due-soon'
+        else status = 'upcoming'
+        return {
+          ...item,
+          hasHistory,
+          lastServicedAt,
+          nextDueAt,
+          milesUntilDue,
+          status,
+          lowerBound,
+          upperBound,
+        }
+      }
+
+      // Milestone without history — advisory state based on mileage window.
+      // 'milestone-distant' means the car is more than LEAD_MILES before the
+      // window; consumers (e.g. the road-ahead screen) suppress it until the
+      // vehicle is close enough for the advisory to be actionable.
+      let status
+      if (currentMileage < lowerBound - LEAD_MILES) status = 'milestone-distant'
+      else if (currentMileage < lowerBound) status = 'milestone-upcoming'
+      else if (currentMileage <= upperBound) status = 'consider-now'
+      else status = 'likely-overdue'
+
+      return {
+        ...item,
+        hasHistory,
+        lastServicedAt,
+        nextDueAt: null,
+        milesUntilDue: null,
+        status,
+        lowerBound,
+        upperBound,
+      }
+    }
+
+    // Recurring item — existing logic unchanged
     const nextDueAt = hasHistory
       ? lastServicedAt + (item.intervalMiles || Infinity)
       : null
@@ -239,13 +323,26 @@ export function buildLastServicedMap(records = []) {
  * those items have `milesUntilDue === null`).
  */
 export function sortByUrgency(a, b) {
-  const order = { overdue: 0, 'due-soon': 1, upcoming: 2, 'no-baseline': 3 }
+  const order = {
+    overdue:              0,
+    'likely-overdue':     1,
+    'consider-now':       2,
+    'due-soon':           3,
+    upcoming:             4,
+    'milestone-upcoming': 5,
+    'no-baseline':        6,
+    'milestone-distant':  7,  // filtered from road-ahead; listed last for other consumers
+  }
   if (order[a.status] !== order[b.status]) {
     return order[a.status] - order[b.status]
   }
-  if (a.status === 'no-baseline') {
-    return a.name.localeCompare(b.name)
+  // Within-group tiebreaks
+  if (a.status === 'no-baseline') return a.name.localeCompare(b.name)
+  if (a.status === 'overdue') return a.milesUntilDue - b.milesUntilDue  // most negative first
+  // Milestone advisory groups: sort by dueAroundMiles ascending (lower window first)
+  if (a.status === 'likely-overdue' || a.status === 'consider-now' || a.status === 'milestone-upcoming') {
+    return a.dueAroundMiles - b.dueAroundMiles
   }
-  // Within same status group, closest-due first
+  // due-soon, upcoming: closest first
   return a.milesUntilDue - b.milesUntilDue
 }

@@ -14,7 +14,7 @@ import MicroLabel from './MicroLabel.jsx'
 export default function OdometerCard({
   currentMileage = 0,
   vehicleName = '',
-  dueSoonCount = 0,
+  attentionCount = 0,
 }) {
   return (
     <div
@@ -57,7 +57,7 @@ export default function OdometerCard({
       </div>
 
       {/* Right: due-soon badge (hidden when 0) */}
-      {dueSoonCount > 0 && (
+      {attentionCount > 0 && (
         <div
           className="flex flex-col items-center justify-center text-center"
           style={{
@@ -77,7 +77,7 @@ export default function OdometerCard({
               color: 'var(--color-primary)',
             }}
           >
-            EST · DUE SOON
+            TO REVIEW
           </div>
           <div
             className="font-mono tabular-nums"
@@ -89,7 +89,7 @@ export default function OdometerCard({
               marginTop: 2,
             }}
           >
-            {dueSoonCount}
+            {attentionCount}
           </div>
           <div
             className="font-mono"
@@ -100,7 +100,7 @@ export default function OdometerCard({
               opacity: 0.85,
             }}
           >
-            {dueSoonCount === 1 ? 'item' : 'items'}
+            {attentionCount === 1 ? 'item' : 'items'}
           </div>
         </div>
       )}

@@ -48,40 +48,60 @@ export default function ScheduleScreen({
   const modelName = (v?.model || v?.nickname || '').toUpperCase()
 
   // ─── Pipeline ───────────────────────────────────────────────────
-  // 1. Build last-serviced map and compute statuses (existing math).
-  // 2. Filter for horizon — overdue services always survive.
-  // 3. Sort with sortByUrgency (overdue → due-soon → upcoming).
-  // 4. Promote the first non-overdue stop to "next-up".
+  // 1. Build last-serviced map and compute statuses.
+  // 2. Filter: overdue, no-baseline, and milestone advisories always
+  //    survive; recurring predictions must land inside the horizon.
+  //    'milestone-distant' needs no special case — it has nextDueAt:null
+  //    and is absent from ALWAYS_SHOW, so Number.isFinite(null) drops it
+  //    automatically. It only surfaces once the car is within LEAD_MILES
+  //    of the window, at which point it becomes 'milestone-upcoming'.
+  // 3. Sort with sortByUrgency (overdue → likely-overdue → consider-now
+  //    → due-soon → upcoming → milestone-upcoming → no-baseline).
+  // 4. Promote the first non-overdue *recurring* stop to "next-up".
+  //    Milestones are never promoted to next-up (no precise timeline).
   // 5. Map to ServiceStop view-models.
   const lastServicedMap = buildLastServicedMap(serviceRecords)
   const horizonCutoff = currentMileage + HORIZON_MI
 
+  const ALWAYS_SHOW = new Set([
+    'overdue',
+    'no-baseline',
+    'consider-now',
+    'likely-overdue',
+    'milestone-upcoming',
+  ])
+
   const filtered = computeServiceStatus(currentMileage, lastServicedMap)
     .filter((s) => {
-      // Always include overdue (regardless of horizon) and no-baseline
-      // (no predicted mileage to compare against). Other statuses only
-      // surface if their predicted mileage lands inside the horizon.
-      if (s.status === 'overdue' || s.status === 'no-baseline') return true
+      if (ALWAYS_SHOW.has(s.status)) return true
       return Number.isFinite(s.nextDueAt) && s.nextDueAt <= horizonCutoff
     })
     .sort(sortByUrgency)
 
-  // Next-up promotion — first item with a real prediction (due-soon or
-  // upcoming). Overdue and no-baseline are NOT eligible: overdue is
-  // already shouting, and no-baseline has no timing to anchor "next".
+  // Next-up promotion — first recurring item with a real prediction.
+  // Milestone items (even with history) are excluded from next-up so the
+  // promotion stays anchored to a precise predicted mileage.
   const nextUpIdx = filtered.findIndex(
-    (s) => s.status === 'due-soon' || s.status === 'upcoming',
+    (s) =>
+      (s.status === 'due-soon' || s.status === 'upcoming') &&
+      s.kind === 'recurring',
   )
 
   const stops = filtered.map((s, i) =>
     toViewModel(s, currentMileage, serviceRecords, i === nextUpIdx),
   )
 
-  // Count by FINAL severity, not raw status — so the badge number
-  // matches the count of yellow nodes the user actually sees rendered.
-  // (The promoted next-up is shown in primary cyan, not signal yellow;
-  // no-baseline never counts as due-soon.)
-  const dueSoonCount = stops.filter((s) => s.severity === 'due-soon').length
+  // Badge counts the amber tier: due-soon (recurring) + consider-now +
+  // likely-overdue (milestones). Overdue items are visually unmissable
+  // (red) so they're excluded — the badge is for "worth attending to"
+  // items, not "already on fire" items. The promoted next-up shows as
+  // cyan and is therefore also excluded.
+  const attentionCount = stops.filter(
+    (s) =>
+      s.severity === 'due-soon' ||
+      s.severity === 'consider-now' ||
+      s.severity === 'likely-overdue',
+  ).length
 
   return (
     <>
@@ -122,7 +142,7 @@ export default function ScheduleScreen({
           <OdometerCard
             currentMileage={currentMileage}
             vehicleName={modelName}
-            dueSoonCount={dueSoonCount}
+            attentionCount={attentionCount}
           />
         </div>
 
@@ -173,9 +193,11 @@ export default function ScheduleScreen({
           >
             <TimelineRail />
             {stops.map((stop, i) => {
-              // Mark the transition into the no-baseline group so users
-              // understand why those cards look different. Also fires
-              // when the entire list is no-baseline (brand-new vehicle).
+              // Separator fires only at the transition into the no-baseline
+              // group (recurring items with no history). Milestone advisory
+              // cards (consider-now, likely-overdue, milestone-upcoming) are
+              // interleaved by urgency near the top — they are NOT part of
+              // the "no history yet" group and don't trigger this separator.
               const isFirstNoBaseline =
                 stop.severity === 'no-baseline' &&
                 stops[i - 1]?.severity !== 'no-baseline'
@@ -222,8 +244,48 @@ export default function ScheduleScreen({
 // ─── View-model + helpers ─────────────────────────────────────────
 
 function toViewModel(s, currentMileage, serviceRecords, isNextUp) {
-  // No-baseline branch: no predicted mileage, no date, no timing math.
-  // The card communicates "we have no record — worth logging."
+  // ── Milestone advisory states (no history) ──────────────────────
+  // These have no predicted mileage; they use dueAroundMiles as the
+  // approximate anchor. ServiceStop renders `~X MI` for these.
+  if (s.status === 'consider-now') {
+    return {
+      key: s.id,
+      predictedMileage: s.dueAroundMiles,
+      predictedDate: '',
+      dueText: 'CONSIDER NOW',
+      serviceName: s.name,
+      intervalText: `Typically around ${s.dueAroundMiles.toLocaleString()} mi`,
+      severity: 'consider-now',
+    }
+  }
+
+  if (s.status === 'likely-overdue') {
+    return {
+      key: s.id,
+      predictedMileage: s.dueAroundMiles,
+      predictedDate: '',
+      dueText: 'LIKELY OVERDUE',
+      serviceName: s.name,
+      intervalText: `Typically around ${s.dueAroundMiles.toLocaleString()} mi`,
+      severity: 'likely-overdue',
+    }
+  }
+
+  if (s.status === 'milestone-upcoming') {
+    const milesAway = Math.round(s.dueAroundMiles - currentMileage)
+    return {
+      key: s.id,
+      predictedMileage: s.dueAroundMiles,
+      predictedDate: '',
+      dueText: `IN ~${milesAway.toLocaleString()} MI`,
+      serviceName: s.name,
+      intervalText: `Typically around ${s.dueAroundMiles.toLocaleString()} mi`,
+      severity: 'milestone-upcoming',
+    }
+  }
+
+  // ── No-baseline (recurring, no history) ─────────────────────────
+  // Communicates "we have no record — worth logging."
   if (s.status === 'no-baseline') {
     return {
       key: s.id,
@@ -240,6 +302,7 @@ function toViewModel(s, currentMileage, serviceRecords, isNextUp) {
     }
   }
 
+  // ── Recurring (or milestone with history) ───────────────────────
   const delta = s.milesUntilDue
   const isOverdue = s.status === 'overdue'
 
