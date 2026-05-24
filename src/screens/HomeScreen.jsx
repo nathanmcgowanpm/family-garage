@@ -32,7 +32,7 @@ import {
   sortByUrgency,
 } from '../data/maintenance-intervals.js'
 
-const HORIZON_MI = 5000
+// HomeScreen no longer uses a fixed horizon — MileageTape auto-scales.
 
 export default function HomeScreen({
   user,
@@ -76,19 +76,47 @@ export default function HomeScreen({
       ? Math.max(0, currentMileage - priorMileage)
       : null
 
-  // ─── Mileage horizon markers ───────────────────────────────
+  // ─── Maintenance horizon markers ──────────────────────────
+  // Two sources — MileageTape handles range auto-scaling internally.
+  //
+  // Precise: recurring services with logged history → exact nextDueAt.
+  //   Both upcoming AND recently-overdue are included (both are context).
+  //
+  // Approximate: milestone advisories without history → window center
+  //   (dueAroundMiles). Flagged approximate:true so the tape renders them
+  //   with a tilde, amber color, and reduced opacity. milestone-distant
+  //   items stay suppressed (consistent with road-ahead filter).
   const lastServicedMap = buildLastServicedMap(serviceRecords)
   const allServices = computeServiceStatus(currentMileage, lastServicedMap).sort(
     sortByUrgency,
   )
-  const horizonCutoff = currentMileage + HORIZON_MI
-  const markers = allServices
-    .filter((s) => Number.isFinite(s.nextDueAt) && s.nextDueAt <= horizonCutoff)
-    .map((s) => ({
-      mileage: s.nextDueAt,
-      label: s.name,
-      warn: s.status === 'due-soon',
-    }))
+
+  const markers = []
+  for (const s of allServices) {
+    if (s.kind === 'recurring' && s.hasHistory && Number.isFinite(s.nextDueAt)) {
+      markers.push({
+        mileage: s.nextDueAt,
+        label: s.name,
+        warn: s.status === 'due-soon' || s.status === 'overdue',
+        approximate: false,
+      })
+    } else if (
+      s.kind === 'milestone' &&
+      !s.hasHistory &&
+      (s.status === 'consider-now' ||
+        s.status === 'likely-overdue' ||
+        s.status === 'milestone-upcoming')
+    ) {
+      markers.push({
+        mileage: s.dueAroundMiles,
+        label: s.name,
+        // Amber for actionable states (consider-now / likely-overdue);
+        // neutral for milestone-upcoming (approaching but not yet due)
+        warn: s.status === 'consider-now' || s.status === 'likely-overdue',
+        approximate: true,
+      })
+    }
+  }
 
   // ─── Recent activity ───────────────────────────────────────
   const recent = serviceRecords.slice(0, 3)
@@ -238,29 +266,14 @@ export default function HomeScreen({
           </div>
         </section>
 
-        {/* Mileage horizon */}
+        {/* Maintenance horizon */}
         <section style={{ marginTop: 24 }}>
-          <div
-            className="flex items-baseline justify-between"
-            style={{ padding: '0 20px 6px' }}
-          >
-            <MicroLabel>Mileage horizon</MicroLabel>
-            <span
-              className="font-mono uppercase"
-              style={{
-                fontSize: 9,
-                letterSpacing: '1.4px',
-                color: 'var(--color-text-mute)',
-                fontWeight: 500,
-              }}
-            >
-              NEXT 5,000 MI →
-            </span>
+          <div style={{ padding: '0 20px 6px' }}>
+            <MicroLabel>Maintenance horizon</MicroLabel>
           </div>
           <MileageTape
             currentMileage={currentMileage}
             markers={markers}
-            horizonMiles={HORIZON_MI}
           />
         </section>
 
