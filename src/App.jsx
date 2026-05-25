@@ -2,6 +2,7 @@ import HomeScreen from './screens/HomeScreen.jsx'
 import FleetScreen from './screens/FleetScreen.jsx'
 import ScheduleScreen from './screens/ScheduleScreen.jsx'
 import HistoryScreen from './screens/HistoryScreen.jsx'
+import ImportScreen from './screens/ImportScreen.jsx'
 import OnboardingScreen from './OnboardingScreen'
 import LoginScreen from './LoginScreen'
 import AccountMenu from './components/AccountMenu'
@@ -9,14 +10,12 @@ import VehicleSheet from './components/VehicleSheet'
 import AppShell from './components/AppShell'
 import TabBar from './design-system/primitives/TabBar.jsx'
 import PendingReviewBanner from './components/PendingReviewBanner'
-import ReceiptForm from './components/ReceiptForm'
-import { ReceiptPreview, ReceiptFormSkeleton } from './components/ReceiptParsingSkeleton'
 import { DashboardSkeleton } from './components/Skeletons'
 import { useAuth } from './hooks/useAuth'
 import { useVehicles } from './hooks/useVehicles'
 import { useServiceRecords } from './hooks/useServiceRecords'
 import { usePendingRecords } from './hooks/usePendingRecords'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 
 // ─── Vehicle shape adapters ──────────────────────────────────
 // The UI components were built around a flat display shape:
@@ -85,112 +84,6 @@ function AppHeader({ screen, onNavigate, onOpenAccount }) {
   )
 }
 
-// ─── Import screen ───────────────────────────────────────────
-
-function ImportScreen({ onFinalize, saving, vehicles, activeVehicleId }) {
-  const [parseState, setParseState] = useState('idle')
-  const [parsedData, setParsedData] = useState(null)
-  const [errorMsg, setErrorMsg] = useState('')
-  const fileRef = useRef(null)
-
-  function resetUpload() {
-    if (fileRef.current) fileRef.current.value = ''
-    setParseState('idle')
-    setParsedData(null)
-    setErrorMsg('')
-  }
-
-  function handleFileSelected(input) {
-    if (!input.files || !input.files[0]) return
-    const file = input.files[0]
-    if (file.size > 10 * 1024 * 1024) return alert('Too large.')
-    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-    const isImage = file.type.startsWith('image/')
-    if (!isPDF && !isImage) return alert('Choose an image or PDF.')
-    setParseState('selected')
-    setParsedData({ file, isPDF, isImage, previewUrl: isImage ? URL.createObjectURL(file) : null })
-  }
-
- async function startParsing() {
-    if (!parsedData?.file) return
-    setParseState('parsing')
-    try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result.split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(parsedData.file)
-      })
-      const mediaType = parsedData.isPDF ? 'application/pdf' : parsedData.file.type
-      const response = await fetch('/api/parse-receipt', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ base64, mediaType }),
-      })
-      if (!response.ok) throw new Error(`API error ${response.status}`)
-      const parsed = await response.json()
-      setParsedData((prev) => ({ ...prev, ...parsed }))
-      setParseState('done')
-    } catch (err) {
-      setErrorMsg(err.message || 'Something went wrong.')
-      setParseState('error')
-    }
-  }
-
-  return (
-    <div className="animate-page-in" style={{ paddingTop: 88, paddingBottom: 100, paddingLeft: 20, paddingRight: 20 }}>
-      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', fontWeight: 600, margin: '0 0 24px' }}>Import record</h2>
-      <input ref={fileRef} type="file" accept="image/*,.pdf" style={{ display:'none' }} onChange={e => handleFileSelected(e.target)} />
-      {(parseState === 'idle' || parseState === 'selected') && (
-        <div onClick={() => parseState === 'idle' && fileRef.current?.click()} style={{ aspectRatio:'4/3', borderRadius:'var(--radius-lg)', background: 'var(--color-bg-surface)', border: `2px dashed ${parseState === 'selected' ? 'var(--color-accent)' : 'var(--color-border-default)'}`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, cursor: parseState === 'idle' ? 'pointer' : 'default' }}>
-          {parseState === 'idle' ? (
-            <>
-              <div style={{ width:56, height:56, borderRadius:'50%', background:'var(--color-accent-bg)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <Icon name="add_a_photo" style={{ color:'var(--color-accent)', fontSize:26 }} />
-              </div>
-              <div style={{ textAlign:'center' }}>
-                <p style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:16, margin:'0 0 4px' }}>Upload receipt</p>
-                <p style={{ fontSize:11, color:'var(--color-text-tertiary)', margin:0 }}>JPEG, PNG or PDF · up to 10MB</p>
-              </div>
-            </>
-          ) : (
-            <button onClick={e => { e.stopPropagation(); startParsing() }} style={{ background:'var(--color-accent)', color:'var(--color-text-inverse)', padding:'12px 24px', borderRadius:12, fontWeight:600, fontSize:13, border:'none', cursor:'pointer', boxShadow:'var(--glow-accent)' }}>
-              Parse with AI
-            </button>
-          )}
-        </div>
-      )}
-      {(parseState === 'parsing' || parseState === 'done') && parsedData && (
-        <div className="fg-parse-grid">
-          <ReceiptPreview
-            parsedData={parsedData}
-            caption={parseState === 'parsing' ? 'Parsing your receipt...' : null}
-          />
-          <div style={{ minWidth: 0 }}>
-            {parseState === 'parsing' ? (
-              <ReceiptFormSkeleton />
-            ) : (
-              <div className="fg-form-fade-in">
-                <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-                  Review the parsed details and adjust if needed.
-                </p>
-                <ReceiptForm
-                  initialData={parsedData}
-                  vehicles={vehicles}
-                  activeVehicleId={activeVehicleId}
-                  onSave={(patch) => onFinalize({ ...parsedData, ...patch })}
-                  saving={saving}
-                  saveLabel="Save to Service History"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      {parseState === 'error' && <p style={{ color: 'var(--color-status-danger)', padding: 20 }}>Error: {errorMsg} <button onClick={resetUpload}>Try again</button></p>}
-    </div>
-  )
-}
 
 function DefenseScreen() {
   return (
@@ -441,7 +334,8 @@ function SignedInApp({ user, onSignOut }) {
     screen === 'home' ||
     screen === 'fleet' ||
     screen === 'schedule' ||
-    screen === 'history'
+    screen === 'history' ||
+    screen === 'import'
 
   const sharedV2Props = {
     user,
@@ -453,10 +347,9 @@ function SignedInApp({ user, onSignOut }) {
     onOpenAccount: () => setAccountOpen(true),
   }
 
-  // Tab-bar active state for legacy screens (the v2 screens render their
-  // own TabBar with the right `active` prop).
-  const legacyActiveTab =
-    screen === 'schedule' ? 'next' : screen === 'import' ? null : null
+  // Tab-bar active state for legacy screens (v2 screens render their own
+  // TabBar). Only DefenseScreen uses the legacy wrapper now.
+  const legacyActiveTab = null
 
   function renderSurface() {
     if (isV2Screen) {
@@ -480,6 +373,19 @@ function SignedInApp({ user, onSignOut }) {
         )
       }
       if (screen === 'fleet') return <FleetScreen {...sharedV2Props} />
+      if (screen === 'import') {
+        return (
+          <ImportScreen
+            user={user}
+            vehicles={vehicles}
+            activeVehicleId={activeVehicleId}
+            onFinalize={handleFinalizeRecord}
+            saving={recordSaving}
+            onNavigate={navigate}
+            onOpenAccount={() => setAccountOpen(true)}
+          />
+        )
+      }
       if (screen === 'schedule') {
         return (
           <ScheduleScreen
@@ -528,14 +434,6 @@ function SignedInApp({ user, onSignOut }) {
           />
         }
       >
-        {screen === 'import' && (
-          <ImportScreen
-            onFinalize={handleFinalizeRecord}
-            saving={recordSaving}
-            vehicles={vehicles}
-            activeVehicleId={activeVehicleId}
-          />
-        )}
         {screen === 'defense' && <DefenseScreen />}
       </AppShell>
     )
