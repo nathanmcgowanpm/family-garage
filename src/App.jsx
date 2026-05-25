@@ -279,20 +279,29 @@ function SignedInApp({ user, onSignOut }) {
   }
 
   async function handleAddVehicle(newVehicle) {
-    // newVehicle comes from VehicleSheet in either display or raw shape.
+    // newVehicle comes from VehicleSheet add view (VIN or Manual mode).
+    // Fields: year (int or string), make, model, trim, nickname,
+    //         vin, license_plate, current_mileage (int) or milesRaw/miles (legacy).
     const milesRaw =
       typeof newVehicle.current_mileage === 'number'
         ? newVehicle.current_mileage
         : parseInt(String(newVehicle.milesRaw ?? newVehicle.miles ?? '').replace(/[^0-9]/g, '')) || 0
 
+    // year may arrive as an integer (VIN mode) or a string (Manual mode select).
+    const yearInt = Number.isFinite(newVehicle.year)
+      ? newVehicle.year
+      : parseInt(newVehicle.year) || null
+
     const { error } = await addVehicle({
-      year: newVehicle.year ?? null,
-      make: newVehicle.make ?? '',
-      model: newVehicle.model ?? '',
-      trim: newVehicle.trim ?? null,
-      nickname: newVehicle.nickname ?? null,
-      current_mileage: milesRaw,
-      mileage_updated_at: new Date().toISOString(),
+      year:                yearInt,
+      make:                newVehicle.make ?? '',
+      model:               newVehicle.model ?? '',
+      trim:                newVehicle.trim ?? null,
+      nickname:            newVehicle.nickname ?? null,
+      vin:                 newVehicle.vin ?? null,
+      license_plate:       newVehicle.license_plate ?? null,
+      current_mileage:     milesRaw,
+      mileage_updated_at:  new Date().toISOString(),
     })
     if (error) {
       alert(`Could not add vehicle: ${error.message}`)
