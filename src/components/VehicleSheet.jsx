@@ -1390,7 +1390,7 @@ function ConfirmCard({
             fontFamily: 'var(--font-mono)',
             fontSize: 9,
             letterSpacing: '1.2px',
-            color: 'var(--color-text-dim)',
+            color: 'var(--color-primary)',
             textTransform: 'uppercase',
             textAlign: 'center',
             margin: '-8px 0 0',
