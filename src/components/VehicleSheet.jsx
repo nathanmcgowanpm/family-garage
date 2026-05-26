@@ -511,6 +511,13 @@ function extractModel(name) {
 // --color-surface, --color-text, etc.) — not the legacy tokens
 // used by the edit view above.
 
+// Good-enough touch/mobile check — evaluated once at module load.
+// navigator.maxTouchPoints > 0 covers all modern iOS/Android devices.
+// Failure mode is harmless: a touchscreen laptop sees "Photograph" but gets a
+// file picker — a mild label mismatch, not a broken flow.
+const isTouchDevice =
+  typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
+
 // Convert ALL-CAPS NHTSA make to Title Case for display and persistence.
 // Word-by-word: each word (split on space/hyphen) is capitalised.
 // Short all-cap abbreviations (≤3 chars like BMW, GMC) come out as
@@ -1035,13 +1042,21 @@ function VinIdleState({ vinText, onVinInput, onDecode, onPhoto }) {
           gap: 8,
         }}
       >
-        {/* Image icon — reads as "photo/image" on both mobile and desktop */}
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <polyline points="21 15 16 10 5 21"/>
-        </svg>
-        Upload a VIN photo
+        {isTouchDevice ? (
+          /* Camera icon — touch/mobile: capture attribute opens the camera */
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        ) : (
+          /* Image icon — desktop: capture attribute falls back to file picker */
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        )}
+        {isTouchDevice ? 'Photograph the VIN plate' : 'Upload a VIN photo'}
       </button>
     </div>
   )
@@ -1355,11 +1370,35 @@ function ConfirmCard({
           border: canSave ? 'none' : '1px solid var(--color-line-2)',
           cursor: canSave ? 'pointer' : 'default',
           boxShadow: canSave ? 'var(--shadow-primary-button)' : 'none',
+          // Extra opacity in disabled state so the button reads as intentionally
+          // inactive, not ambiguously dim.
+          opacity: canSave ? 1 : 0.5,
           marginTop: 4,
+          transition: 'background 0.2s, box-shadow 0.2s, opacity 0.2s',
         }}
       >
         Add vehicle
       </button>
+
+      {/* Guidance caption — visible only while save is blocked by missing mileage.
+          Neutral muted mono style (not amber/signal — this is guidance, not a warning).
+          Mileage-specific messaging is correct: it's always the empty field here,
+          since year/make/model arrive pre-filled from NHTSA. */}
+      {!canSave && (
+        <p
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            letterSpacing: '1.2px',
+            color: 'var(--color-text-dim)',
+            textTransform: 'uppercase',
+            textAlign: 'center',
+            margin: '-8px 0 0',
+          }}
+        >
+          Enter current mileage to continue
+        </p>
+      )}
 
       {/* Back link */}
       <button
