@@ -550,16 +550,17 @@ const v2InputStyle = {
   boxSizing: 'border-box',
 }
 
-function V2Field({ label, hint, optional, children }) {
+function V2Field({ label, hint, optional, prominent, children }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
         <label
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            fontWeight: 600,
-            color: 'var(--color-text-mute)',
+            // prominent = full-contrast weight, used for load-bearing fields like mileage
+            fontSize:   prominent ? 10 : 9,
+            fontWeight: prominent ? 700 : 600,
+            color:      prominent ? 'var(--color-text)' : 'var(--color-text-mute)',
             textTransform: 'uppercase',
             letterSpacing: '1.3px',
           }}
@@ -1034,12 +1035,13 @@ function VinIdleState({ vinText, onVinInput, onDecode, onPhoto }) {
           gap: 8,
         }}
       >
-        {/* Camera icon SVG */}
+        {/* Image icon — reads as "photo/image" on both mobile and desktop */}
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-          <circle cx="12" cy="13" r="4" />
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21 15 16 10 5 21"/>
         </svg>
-        Photograph the VIN plate
+        Upload a VIN photo
       </button>
     </div>
   )
@@ -1174,7 +1176,14 @@ function ConfirmCard({
   cTrim, onCTrim, cNickname, onCNickname, cMiles, onCMiles,
   onSave, onBack,
 }) {
-  const canSave = cYear.trim() && cMake.trim() && cModel.trim()
+  // Auto-focus mileage the moment the confirm card mounts — it's the one field
+  // the user actually has to fill (NHTSA already provided year/make/model/trim).
+  const milesRef = useRef(null)
+  useEffect(() => { milesRef.current?.focus() }, [])
+
+  // Mileage is hard-required: the road-ahead engine needs current_mileage to be
+  // meaningful. A vehicle saved at 0 miles produces a broken road-ahead.
+  const canSave = cYear.trim() && cMake.trim() && cModel.trim() && cMiles.trim()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1286,8 +1295,13 @@ function ConfirmCard({
         />
       </V2Field>
 
-      <V2Field label="Current mileage">
+      <V2Field
+        label="Current mileage"
+        prominent
+        hint="Required for maintenance tracking"
+      >
         <input
+          ref={milesRef}
           type="text"
           inputMode="numeric"
           value={cMiles}
@@ -1429,7 +1443,12 @@ function ManualModeView({
         />
       </V2Field>
 
-      <V2Field label="Current mileage" optional>
+      <V2Field
+        label="Current mileage"
+        prominent
+        optional
+        hint="Needed for maintenance predictions"
+      >
         <input
           type="text"
           inputMode="numeric"
