@@ -1,29 +1,31 @@
 /**
- * AccountMenu — account dropdown
- * -------------------------------
+ * AccountMenu — account dropdown, v2 Arctic Signal
+ * -------------------------------------------------
  * Shows:
  *   1. User email
- *   2. Forwarding address — static apex `receipts@familygarage.ai`,
- *      with copy button + help text explaining From-header matching
- *   3. Notification preferences (3 toggles, synced to user_profiles)
- *   4. "Manage vehicles" link (opens VehicleSheet via callback)
+ *   2. Forwarding address — static `receipts@familygarage.ai`,
+ *      copy button + help text about From-header matching
+ *   3. Notification preferences (service reminders only — real/wired)
+ *   4. "Manage vehicles" → opens VehicleSheet via callback
  *   5. Sign out
  *
- * Anchored to the right edge of the viewport. Closes on
- * outside-click or Escape.
+ * Anchored top-right. Closes on outside-click or Escape.
  *
- * Note: the forwarding address is the same for every user. The
- * Postmark webhook disambiguates by matching the inbound From:
- * header to auth.users.email — so users must forward from their
- * account email for records to land in their household.
+ * Phantom toggles removed (Phase 5):
+ *   "Recall alerts" (notif_recalls) and "Email summaries"
+ *   (notif_email_summary) have been removed. Those features don't
+ *   exist; they were writing to user_profiles columns that nothing
+ *   reads. The DB columns are left intact (no migration needed) but
+ *   are no longer written. "Service reminders" is real and stays.
+ *
+ * Token migration: all tokens migrated to v2 Arctic Signal.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-// Single shared forwarding address for the whole product.
-// Lives here as a module constant so both this menu and the
-// dashboard tip card stay in sync.
+// Single shared forwarding address — exported so dashboard tip cards stay in sync.
+// The Postmark webhook matches inbound From: header to auth.users.email.
 export const FORWARDING_ADDRESS = 'receipts@familygarage.ai'
 
 function Icon({ name, fill = false, style = {} }) {
@@ -32,12 +34,11 @@ function Icon({ name, fill = false, style = {} }) {
 
 export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles }) {
   const menuRef = useRef(null)
-  const [profile, setProfile] = useState(null)
+  const [profile,        setProfile]        = useState(null)
   const [profileLoading, setProfileLoading] = useState(true)
-  const [copied, setCopied] = useState(false)
+  const [copied,         setCopied]         = useState(false)
 
-  // Load profile (only needed for notification toggles now that the
-  // forwarding address is no longer per-user)
+  // Load profile — needed for the service reminders toggle
   useEffect(() => {
     async function loadProfile() {
       const { data } = await supabase
@@ -68,6 +69,7 @@ export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles
     }
   }, [onClose])
 
+  // Persist a single user_profiles field to Supabase (optimistic update)
   async function updatePreference(field, value) {
     setProfile((p) => ({ ...p, [field]: value }))
     await supabase.from('user_profiles').update({ [field]: value }).eq('id', user.id)
@@ -85,8 +87,18 @@ export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles
 
   return (
     <>
-      <div aria-hidden style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 90 }} />
+      {/* Backdrop */}
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.45)',
+          zIndex: 90,
+        }}
+      />
 
+      {/* Menu panel */}
       <div
         ref={menuRef}
         role="menu"
@@ -98,59 +110,86 @@ export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles
           maxHeight: 'calc(100vh - 96px)',
           overflowY: 'auto',
           zIndex: 100,
-          background: 'var(--color-bg-surface)',
-          border: '1px solid var(--color-border-subtle)',
-          borderRadius: 'var(--radius-lg)',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-          animation: 'menu-in 0.15s var(--ease-out)',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-line-2)',
+          borderRadius: 20,
+          boxShadow: '0 20px 48px rgba(0,0,0,0.55)',
+          animation: 'acct-menu-in 0.15s ease-out',
         }}
       >
         <style>{`
-          @keyframes menu-in {
-            from { opacity: 0; transform: translateY(-4px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+          @keyframes acct-menu-in {
+            from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+            to   { opacity: 1; transform: translateY(0)   scale(1);    }
           }
         `}</style>
 
-        {/* Header: email */}
-        <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--color-border-subtle)' }}>
-          <MonoLabel color="tertiary">Signed in as</MonoLabel>
-          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text-primary)', wordBreak: 'break-all', marginTop: 4 }}>
+        {/* ── Email header ──────────────────────────────────── */}
+        <div
+          style={{
+            padding: '16px 16px 14px',
+            borderBottom: '1px solid var(--color-line-2)',
+          }}
+        >
+          <SectionLabel>Signed in as</SectionLabel>
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              color: 'var(--color-text)',
+              wordBreak: 'break-all',
+              marginTop: 5,
+              letterSpacing: '0.3px',
+            }}
+          >
             {user.email}
           </div>
         </div>
 
-        {/* Forwarding address */}
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border-subtle)' }}>
-          <MonoLabel color="accent">Forward receipts</MonoLabel>
+        {/* ── Forwarding address ────────────────────────────── */}
+        <div
+          style={{
+            padding: '14px 16px 16px',
+            borderBottom: '1px solid var(--color-line-2)',
+          }}
+        >
+          <SectionLabel accent>Forward receipts</SectionLabel>
 
+          {/* Copy button */}
           <button
             onClick={copyForwardingEmail}
             style={{
               width: '100%',
               marginTop: 8,
-              background: 'var(--color-bg-inset)',
-              border: '1px solid var(--color-border-accent)',
-              borderRadius: 'var(--radius-md)',
+              background: copied ? 'rgba(109,255,176,0.07)' : 'var(--color-surface-2)',
+              border: `1px solid ${copied ? 'rgba(109,255,176,0.35)' : 'var(--color-primary-line)'}`,
+              borderRadius: 12,
               padding: '10px 12px',
               textAlign: 'left',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
+              transition: 'background 0.2s, border-color 0.2s',
             }}
           >
             <Icon
               name={copied ? 'check_circle' : 'mail'}
-              style={{ color: 'var(--color-accent)', fontSize: 18, flexShrink: 0 }}
+              fill={copied}
+              style={{
+                color: copied ? 'var(--color-go)' : 'var(--color-primary)',
+                fontSize: 18,
+                flexShrink: 0,
+              }}
             />
             <span
               style={{
                 flex: 1,
                 fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                color: 'var(--color-text-primary)',
+                fontSize: 11,
+                color: 'var(--color-text)',
                 wordBreak: 'break-all',
+                letterSpacing: '0.3px',
               }}
             >
               {FORWARDING_ADDRESS}
@@ -158,64 +197,80 @@ export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles
             <Icon
               name={copied ? 'done' : 'content_copy'}
               style={{
-                color: copied ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                color: copied ? 'var(--color-go)' : 'var(--color-text-mute)',
                 fontSize: 16,
                 flexShrink: 0,
+                transition: 'color 0.2s',
               }}
             />
           </button>
 
-          <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-            Forward service receipts to this address — we'll parse them and queue
-            them for review on your dashboard.
+          <p
+            style={{
+              margin: '10px 0 0',
+              fontFamily: 'var(--font-body)',
+              fontSize: 12,
+              color: 'var(--color-text-dim)',
+              lineHeight: 1.5,
+            }}
+          >
+            Forward service receipts here — we'll parse them and queue them
+            for review on your dashboard.
           </p>
-          <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
-            Only forwards from <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>{user.email}</span> will be matched to your account.
+          <p
+            style={{
+              margin: '5px 0 0',
+              fontFamily: 'var(--font-body)',
+              fontSize: 11,
+              color: 'var(--color-text-mute)',
+              lineHeight: 1.5,
+            }}
+          >
+            Only forwards from{' '}
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--color-text-dim)',
+              }}
+            >
+              {user.email}
+            </span>{' '}
+            will be matched to your account.
           </p>
         </div>
 
-        {/* Notifications */}
-        {profileLoading ? null : profile && (
-          <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border-subtle)' }}>
-            <MonoLabel color="tertiary">Notifications</MonoLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 8 }}>
+        {/* ── Notifications (service reminders only) ────────── */}
+        {!profileLoading && profile && (
+          <div
+            style={{
+              padding: '14px 16px 12px',
+              borderBottom: '1px solid var(--color-line-2)',
+            }}
+          >
+            <SectionLabel>Notifications</SectionLabel>
+            <div style={{ marginTop: 6 }}>
               <ToggleRow
                 label="Service reminders"
                 value={profile.notif_service_reminders}
                 onChange={(v) => updatePreference('notif_service_reminders', v)}
               />
-              <ToggleRow
-                label="Recall alerts"
-                value={profile.notif_recalls}
-                onChange={(v) => updatePreference('notif_recalls', v)}
-              />
-              <ToggleRow
-                label="Email summaries"
-                value={profile.notif_email_summary}
-                onChange={(v) => updatePreference('notif_email_summary', v)}
-              />
             </div>
           </div>
         )}
 
-        {/* Manage vehicles */}
+        {/* ── Manage vehicles ───────────────────────────────── */}
         <MenuButton
           icon="directions_car"
           label="Manage vehicles"
-          onClick={() => {
-            onClose()
-            onManageVehicles()
-          }}
+          onClick={() => { onClose(); onManageVehicles() }}
         />
 
-        {/* Sign out */}
+        {/* ── Sign out ──────────────────────────────────────── */}
         <MenuButton
           icon="logout"
           label="Sign out"
-          onClick={() => {
-            onClose()
-            onSignOut()
-          }}
+          onClick={() => { onClose(); onSignOut() }}
           danger
         />
       </div>
@@ -223,17 +278,18 @@ export default function AccountMenu({ user, onSignOut, onClose, onManageVehicles
   )
 }
 
-function MonoLabel({ children, color = 'tertiary' }) {
-  const c = color === 'accent' ? 'var(--color-accent)' : 'var(--color-text-tertiary)'
+// ─── Sub-components ───────────────────────────────────────────
+
+function SectionLabel({ children, accent }) {
   return (
     <div
       style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        color: c,
-        letterSpacing: '0.15em',
-        textTransform: 'uppercase',
+        fontSize: 9,
         fontWeight: 600,
+        color: accent ? 'var(--color-primary)' : 'var(--color-text-mute)',
+        letterSpacing: '1.3px',
+        textTransform: 'uppercase',
       }}
     >
       {children}
@@ -246,16 +302,25 @@ function ToggleRow({ label, value, onChange }) {
     <button
       onClick={() => onChange(!value)}
       style={{
+        width: '100%',
         background: 'transparent',
         border: 'none',
-        padding: '8px 0',
+        padding: '9px 0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         cursor: 'pointer',
       }}
     >
-      <span style={{ fontSize: 13, color: 'var(--color-text-primary)' }}>{label}</span>
+      <span
+        style={{
+          fontFamily: 'var(--font-body)',
+          fontSize: 13,
+          color: 'var(--color-text)',
+        }}
+      >
+        {label}
+      </span>
       <Toggle value={value} />
     </button>
   )
@@ -267,11 +332,12 @@ function Toggle({ value }) {
       style={{
         width: 36,
         height: 22,
-        borderRadius: 'var(--radius-full)',
-        background: value ? 'var(--color-accent)' : 'var(--color-bg-inset)',
-        border: `1px solid ${value ? 'var(--color-accent)' : 'var(--color-border-default)'}`,
+        borderRadius: 100,
+        background: value ? 'var(--color-primary)' : 'var(--color-surface-3)',
+        border: `1px solid ${value ? 'var(--color-primary)' : 'var(--color-line-3)'}`,
         position: 'relative',
-        transition: 'all var(--duration-base) var(--ease-out)',
+        flexShrink: 0,
+        transition: 'background 0.15s ease-out, border-color 0.15s ease-out',
       }}
     >
       <div
@@ -282,8 +348,8 @@ function Toggle({ value }) {
           width: 16,
           height: 16,
           borderRadius: '50%',
-          background: value ? 'var(--color-bg-base)' : 'var(--color-text-tertiary)',
-          transition: 'left var(--duration-base) var(--ease-out)',
+          background: value ? 'var(--color-ink)' : 'var(--color-text-mute)',
+          transition: 'left 0.15s ease-out',
         }}
       />
     </div>
@@ -298,19 +364,26 @@ function MenuButton({ icon, label, onClick, danger }) {
         width: '100%',
         background: 'transparent',
         border: 'none',
+        borderBottom: '1px solid var(--color-line-2)',
         padding: '14px 16px',
         display: 'flex',
         alignItems: 'center',
         gap: 12,
-        color: danger ? 'var(--color-status-danger)' : 'var(--color-text-primary)',
+        color: danger ? 'var(--color-danger)' : 'var(--color-text)',
         cursor: 'pointer',
+        fontFamily: 'var(--font-body)',
         fontSize: 14,
         fontWeight: 500,
         textAlign: 'left',
-        borderBottom: '1px solid var(--color-border-subtle)',
       }}
     >
-      <Icon name={icon} style={{ fontSize: 20, color: danger ? 'var(--color-status-danger)' : 'var(--color-text-secondary)' }} />
+      <Icon
+        name={icon}
+        style={{
+          fontSize: 20,
+          color: danger ? 'var(--color-danger)' : 'var(--color-text-dim)',
+        }}
+      />
       {label}
     </button>
   )
