@@ -1,15 +1,37 @@
 /**
- * LoginScreen — magic link sign-in
- * ---------------------------------
- * Three states:
- *   1. 'entry'   — email input + "Send magic link" button
- *   2. 'sending' — loading state while the request is in flight
- *   3. 'sent'    — "Check your email" confirmation, with resend option
+ * LoginScreen — OTP sign-in, v2 Arctic Signal tokens
+ * ---------------------------------------------------
+ * State machine:
+ *   'entry'   — email input + "Send code" button (+ inline email errors)
+ *   'sending' — spinner while signIn() is in-flight
+ *   'verify'  — 6-digit code entry card; auto-submits on 6th digit
  *
- * Matches the Family Garage cyan aesthetic. Full-bleed, no chrome.
+ * OTP flow replaces magic-link flow. The session is established by
+ * verifyOtp returning a session directly — Supabase fires SIGNED_IN via
+ * onAuthStateChange internally, and the App.jsx listener re-renders to
+ * <SignedInApp>. LoginScreen does nothing special on success; it simply
+ * unmounts when user becomes non-null.
+ *
+ * ⚠️  REQUIRED DASHBOARD TASK (not a code task):
+ *   Supabase dashboard → Authentication → Email Templates → "Magic Link"
+ *   The template body must surface {{ .Token }} (the 6-digit code) and
+ *   should NOT include the magic link href — otherwise Supabase still
+ *   sends a clickable link that strands mobile sessions in Gmail's
+ *   in-app WebView. This is a Supabase dashboard edit, not in the repo.
+ *
+ * Token migration: all tokens migrated to v2 Arctic Signal:
+ *   --color-bg-base      → --color-ink
+ *   --color-bg-surface   → --color-surface
+ *   --color-accent       → --color-primary
+ *   --color-text-primary → --color-text
+ *   --color-text-secondary → --color-text-dim
+ *   --color-text-tertiary  → --color-text-mute
+ *   --color-border-subtle  → --color-line-2
+ *   --color-status-danger  → --color-danger
+ *   --glow-accent          → --shadow-primary-button
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 
 function Icon({ name, style = {} }) {
@@ -17,57 +39,102 @@ function Icon({ name, style = {} }) {
 }
 
 export default function LoginScreen() {
-  const { signIn } = useAuth()
-  const [email, setEmail] = useState('')
-  const [state, setState] = useState('entry')  // entry | sending | sent | error
-  const [errorMsg, setErrorMsg] = useState('')
+  const { signIn, verifyOtp } = useAuth()
+
+  // ── Email-entry state ──────────────────────────────────────
+  const [email,      setEmail]      = useState('')
+  const [state,      setState]      = useState('entry') // 'entry' | 'sending' | 'verify'
+  const [emailError, setEmailError] = useState('')
+
+  // ── Verify-card state ──────────────────────────────────────
+  const [code,      setCode]      = useState('')
+  const [codeError, setCodeError] = useState('')
+  const [verifying, setVerifying] = useState(false)  // true while verifyOtp in-flight
+  const [cooldown,  setCooldown]  = useState(0)      // seconds until resend re-enables
+
+  // Countdown tick — decrements cooldown by 1s until 0
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const id = setTimeout(() => setCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(id)
+  }, [cooldown])
+
+  // ── Handlers ──────────────────────────────────────────────
 
   async function handleSubmit() {
     const trimmed = email.trim()
     if (!trimmed || !trimmed.includes('@')) {
-      setErrorMsg('Please enter a valid email address.')
-      setState('error')
+      setEmailError('Please enter a valid email address.')
       return
     }
-
     setState('sending')
-    setErrorMsg('')
+    setEmailError('')
 
     const { error } = await signIn(trimmed)
-
     if (error) {
-      setErrorMsg(error.message || 'Something went wrong. Please try again.')
-      setState('error')
+      setEmailError(error.message || 'Something went wrong — please try again.')
+      setState('entry')
     } else {
-      setState('sent')
+      setCode('')
+      setCodeError('')
+      setState('verify')
+      setCooldown(30)  // 30s resend cooldown
+    }
+  }
+
+  async function handleVerify(codeToVerify) {
+    setVerifying(true)
+    setCodeError('')
+
+    const { error } = await verifyOtp(email.trim(), codeToVerify)
+    if (error) {
+      setVerifying(false)
+      const msg = error.message?.toLowerCase() ?? ''
+      setCodeError(
+        msg.includes('expired')
+          ? 'That code expired — request a new one.'
+          : "That code didn't match — check it and try again.",
+      )
+      // Code stays visible — user can correct in-place; auto-submits again on 6 digits
+    }
+    // On success: verifyOtp fires SIGNED_IN → onAuthStateChange → App re-renders
+    // LoginScreen unmounts automatically — nothing to do here
+  }
+
+  // Strip non-digits, cap at 6, auto-submit on 6th digit
+  function handleCodeChange(raw) {
+    const digits = raw.replace(/\D/g, '').slice(0, 6)
+    setCode(digits)
+    if (digits.length === 6 && !verifying) {
+      handleVerify(digits)
     }
   }
 
   function resetToEntry() {
     setState('entry')
-    setErrorMsg('')
+    setEmailError('')
+    setCode('')
+    setCodeError('')
+    setVerifying(false)
+    setCooldown(0)
   }
 
-  function handleKeyDown(e) {
-    if (e.key === 'Enter' && state === 'entry') {
-      handleSubmit()
-    }
-  }
+  // ── Render ────────────────────────────────────────────────
 
   return (
     <div
       style={{
         minHeight: '100vh',
-        background: 'var(--color-bg-base)',
-        position: 'relative',
+        background: 'var(--color-ink)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px',
+        padding: '24px 20px',
+        position: 'relative',
       }}
     >
-      {/* Ambient glow backdrop */}
+      {/* Ambient cyan glow backdrop */}
       <div
         aria-hidden
         style={{
@@ -75,46 +142,47 @@ export default function LoginScreen() {
           inset: 0,
           pointerEvents: 'none',
           background:
-            'radial-gradient(ellipse 60% 50% at 50% 30%, rgba(0, 212, 255, 0.08), transparent 70%)',
+            'radial-gradient(ellipse 70% 50% at 50% 20%, rgba(61,214,255,0.07), transparent 70%)',
         }}
       />
 
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 1,
-          width: '100%',
-          maxWidth: 440,
-        }}
-      >
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 420 }}>
         {/* Wordmark */}
         <div
           style={{
             textAlign: 'center',
-            marginBottom: 'var(--space-8)',
+            marginBottom: 32,
             fontFamily: 'var(--font-display)',
-            fontSize: 18,
+            fontSize: 15,
             fontWeight: 700,
-            letterSpacing: '0.2em',
+            letterSpacing: '0.22em',
             textTransform: 'uppercase',
           }}
         >
-          <span style={{ color: 'var(--color-text-primary)' }}>Family </span>
-          <span style={{ color: 'var(--color-accent)' }}>Garage</span>
+          <span style={{ color: 'var(--color-text)' }}>Family </span>
+          <span style={{ color: 'var(--color-primary)' }}>Garage</span>
         </div>
 
-        {state === 'entry' || state === 'error' ? (
+        {state === 'entry'   && (
           <EntryCard
             email={email}
             setEmail={setEmail}
             onSubmit={handleSubmit}
-            onKeyDown={handleKeyDown}
-            errorMsg={state === 'error' ? errorMsg : ''}
+            errorMsg={emailError}
           />
-        ) : state === 'sending' ? (
-          <SendingCard email={email} />
-        ) : (
-          <SentCard email={email} onResetToEntry={resetToEntry} onResend={handleSubmit} />
+        )}
+        {state === 'sending' && <SendingCard email={email} />}
+        {state === 'verify'  && (
+          <VerifyCard
+            email={email}
+            code={code}
+            onCodeChange={handleCodeChange}
+            codeError={codeError}
+            verifying={verifying}
+            cooldown={cooldown}
+            onResend={handleSubmit}
+            onReset={resetToEntry}
+          />
         )}
       </div>
 
@@ -123,11 +191,11 @@ export default function LoginScreen() {
         style={{
           position: 'relative',
           zIndex: 1,
-          marginTop: 'var(--space-8)',
+          marginTop: 32,
           fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--text-xs)',
-          color: 'var(--color-text-tertiary)',
-          letterSpacing: '0.1em',
+          fontSize: 9,
+          color: 'var(--color-text-mute)',
+          letterSpacing: '1.4px',
           textTransform: 'uppercase',
         }}
       >
@@ -137,266 +205,393 @@ export default function LoginScreen() {
   )
 }
 
-// ─── Entry state ──────────────────────────────────────────────
+// ─── Entry card ───────────────────────────────────────────────
+// Email input + "Send code" button. Also shows inline email errors.
 
-function EntryCard({ email, setEmail, onSubmit, onKeyDown, errorMsg }) {
+function EntryCard({ email, setEmail, onSubmit, errorMsg }) {
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') onSubmit()
+  }
+
   return (
-    <div>
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-line-2)',
+        borderRadius: 20,
+        padding: '28px 24px',
+      }}
+    >
       <h1
         style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'var(--text-3xl)',
-          fontWeight: 600,
-          letterSpacing: '-0.02em',
-          margin: '0 0 12px',
-          textAlign: 'center',
-          lineHeight: 1.1,
-          color: 'var(--color-text-primary)',
+          fontSize: 26,
+          fontWeight: 700,
+          letterSpacing: '-0.5px',
+          margin: '0 0 10px',
+          color: 'var(--color-text)',
+          lineHeight: 1.15,
         }}
       >
-        Sign in to your garage
+        Sign in to your{' '}
+        <span style={{ color: 'var(--color-primary)' }}>garage.</span>
       </h1>
       <p
         style={{
-          textAlign: 'center',
-          color: 'var(--color-text-secondary)',
-          fontSize: 'var(--text-base)',
-          margin: '0 0 var(--space-6)',
+          fontFamily: 'var(--font-body)',
+          fontSize: 14,
+          color: 'var(--color-text-dim)',
+          margin: '0 0 24px',
           lineHeight: 1.5,
         }}
       >
-        Enter your email. We'll send you a magic link to sign in instantly — no password needed.
+        Enter your email and we'll send a 6-digit code. No password needed.
       </p>
 
+      {/* Email label */}
+      <label
+        style={{
+          display: 'block',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          fontWeight: 600,
+          color: 'var(--color-text-mute)',
+          textTransform: 'uppercase',
+          letterSpacing: '1.3px',
+          marginBottom: 6,
+        }}
+      >
+        Email
+      </label>
+
       {/* Email input */}
-      <div style={{ marginBottom: 'var(--space-3)' }}>
-        <label
+      <input
+        type="email"
+        autoComplete="email"
+        autoFocus
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="you@example.com"
+        style={{
+          width: '100%',
+          background: 'var(--color-surface-2)',
+          border: `1px solid ${errorMsg ? 'var(--color-danger)' : 'var(--color-line-2)'}`,
+          borderRadius: 12,
+          padding: '13px 15px',
+          color: 'var(--color-text)',
+          fontFamily: 'var(--font-body)',
+          fontSize: 15,
+          outline: 'none',
+          boxSizing: 'border-box',
+          marginBottom: errorMsg ? 6 : 16,
+          transition: 'border-color 0.15s',
+        }}
+      />
+
+      {errorMsg && (
+        <p
           style={{
-            display: 'block',
             fontFamily: 'var(--font-body)',
-            fontSize: 'var(--text-xs)',
-            fontWeight: 600,
-            color: 'var(--color-text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.12em',
-            marginBottom: 8,
+            fontSize: 12,
+            color: 'var(--color-danger)',
+            margin: '0 0 16px',
+            lineHeight: 1.4,
           }}
         >
-          Email
-        </label>
-        <input
-          type="email"
-          autoComplete="email"
-          autoFocus
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="you@example.com"
-          style={{
-            width: '100%',
-            background: 'var(--color-bg-surface)',
-            border: `1px solid ${errorMsg ? 'var(--color-status-danger)' : 'var(--color-border-subtle)'}`,
-            borderRadius: 'var(--radius-md)',
-            padding: '14px 16px',
-            color: 'var(--color-text-primary)',
-            fontFamily: 'var(--font-body)',
-            fontSize: 'var(--text-base)',
-            outline: 'none',
-          }}
-        />
-        {errorMsg && (
-          <p
-            style={{
-              color: 'var(--color-status-danger)',
-              fontSize: 'var(--text-sm)',
-              margin: '8px 0 0',
-            }}
-          >
-            {errorMsg}
-          </p>
-        )}
-      </div>
+          {errorMsg}
+        </p>
+      )}
 
-      {/* Submit button */}
+      {/* Submit */}
       <button
         onClick={onSubmit}
         style={{
           width: '100%',
-          background: 'var(--color-accent)',
-          color: 'var(--color-text-inverse)',
-          fontFamily: 'var(--font-body)',
+          height: 52,
+          background: 'var(--gradient-primary-button)',
+          color: 'var(--color-ink)',
+          fontFamily: 'var(--font-display)',
           fontWeight: 700,
-          fontSize: 'var(--text-sm)',
-          padding: '14px 24px',
-          borderRadius: 'var(--radius-md)',
-          border: 'none',
-          cursor: 'pointer',
-          boxShadow: 'var(--glow-accent)',
+          fontSize: 13,
+          letterSpacing: '1.5px',
           textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          display: 'inline-flex',
+          border: 'none',
+          borderRadius: 14,
+          cursor: 'pointer',
+          boxShadow: 'var(--shadow-primary-button)',
+          display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 'var(--space-2)',
+          gap: 8,
         }}
       >
         <Icon name="mail" style={{ fontSize: 18 }} />
-        Send magic link
+        Send code
       </button>
     </div>
   )
 }
 
-// ─── Sending state ────────────────────────────────────────────
+// ─── Sending card ─────────────────────────────────────────────
+// Spinner shown while signIn() is in-flight.
 
 function SendingCard({ email }) {
   return (
-    <div style={{ textAlign: 'center' }}>
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-line-2)',
+        borderRadius: 20,
+        padding: '48px 24px',
+        textAlign: 'center',
+      }}
+    >
       <div
         style={{
-          width: 56,
-          height: 56,
+          width: 40,
+          height: 40,
           borderRadius: '50%',
-          background: 'var(--color-accent-bg)',
-          border: '1px solid var(--color-border-accent)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto var(--space-4)',
+          border: '2px solid var(--color-line-3)',
+          borderTopColor: 'var(--color-primary)',
+          animation: 'login-spin 0.9s linear infinite',
+          margin: '0 auto 20px',
         }}
-      >
-        <Icon
-          name="autorenew"
-          style={{
-            color: 'var(--color-accent)',
-            fontSize: 26,
-            animation: 'spin 1s linear infinite',
-          }}
-        />
-      </div>
-      <h1
+      />
+      <style>{`@keyframes login-spin { to { transform: rotate(360deg); } }`}</style>
+
+      <h2
         style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'var(--text-2xl)',
-          fontWeight: 600,
+          fontSize: 20,
+          fontWeight: 700,
           margin: '0 0 8px',
-          color: 'var(--color-text-primary)',
+          color: 'var(--color-text)',
         }}
       >
-        Sending your link…
-      </h1>
-      <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-base)', margin: 0 }}>
-        Sending to <strong style={{ color: 'var(--color-text-primary)' }}>{email}</strong>
+        Sending your code…
+      </h2>
+      <p
+        style={{
+          fontFamily: 'var(--font-body)',
+          fontSize: 13,
+          color: 'var(--color-text-dim)',
+          margin: 0,
+        }}
+      >
+        Sending to{' '}
+        <strong style={{ color: 'var(--color-text)', fontWeight: 600 }}>{email}</strong>
       </p>
-
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   )
 }
 
-// ─── Sent state ───────────────────────────────────────────────
+// ─── Verify card ──────────────────────────────────────────────
+// Code entry. Auto-submits on 6th digit. Paste-friendly.
+// Resend has a 30s cooldown. "Use a different email" resets to entry.
 
-function SentCard({ email, onResetToEntry, onResend }) {
+function VerifyCard({ email, code, onCodeChange, codeError, verifying, cooldown, onResend, onReset }) {
+  const inputRef = useRef(null)
+
+  // Auto-focus the code input when the verify card mounts.
+  // The user just submitted their email — the code field is their only task.
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  function handleChange(e) {
+    onCodeChange(e.target.value)
+  }
+
+  // Paste handler: strip whitespace + non-digits, take first 6.
+  // This is the core use-case: user copies code from Gmail, pastes
+  // into the browser they're already in — the whole point of OTP.
+  function handlePaste(e) {
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    onCodeChange(pasted)
+  }
+
+  const canResend = cooldown <= 0 && !verifying
+
   return (
-    <div style={{ textAlign: 'center' }}>
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-line-2)',
+        borderRadius: 20,
+        padding: '28px 24px',
+      }}
+    >
+      {/* Icon badge */}
       <div
         style={{
-          width: 56,
-          height: 56,
-          borderRadius: '50%',
-          background: 'var(--color-accent-bg)',
-          border: '1px solid var(--color-border-accent)',
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          background: 'var(--color-primary-dim)',
+          border: '1px solid var(--color-primary-line)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          margin: '0 auto var(--space-4)',
-          boxShadow: 'var(--glow-accent)',
+          marginBottom: 18,
         }}
       >
-        <Icon name="mark_email_read" style={{ color: 'var(--color-accent)', fontSize: 26 }} />
+        <Icon name="mark_email_read" style={{ color: 'var(--color-primary)', fontSize: 22 }} />
       </div>
 
-      <h1
+      <h2
         style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'var(--text-2xl)',
-          fontWeight: 600,
-          margin: '0 0 12px',
-          color: 'var(--color-text-primary)',
+          fontSize: 22,
+          fontWeight: 700,
+          letterSpacing: '-0.3px',
+          margin: '0 0 8px',
+          color: 'var(--color-text)',
         }}
       >
-        Check your email
-      </h1>
+        Enter your code
+      </h2>
       <p
         style={{
-          color: 'var(--color-text-secondary)',
-          fontSize: 'var(--text-base)',
-          margin: '0 0 var(--space-6)',
+          fontFamily: 'var(--font-body)',
+          fontSize: 13,
+          color: 'var(--color-text-dim)',
+          margin: '0 0 24px',
           lineHeight: 1.5,
         }}
       >
-        We sent a magic link to <br />
-        <strong style={{ color: 'var(--color-text-primary)' }}>{email}</strong>
-        <br />
-        Click the link to sign in.
+        We sent a 6-digit code to{' '}
+        <strong style={{ color: 'var(--color-text)', fontWeight: 600 }}>{email}</strong>.
+        Enter it below.
       </p>
 
-      {/* Secondary actions */}
-      <div
+      {/* Code label */}
+      <label
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-2)',
-          alignItems: 'center',
+          display: 'block',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          fontWeight: 600,
+          color: 'var(--color-text-mute)',
+          textTransform: 'uppercase',
+          letterSpacing: '1.3px',
+          marginBottom: 6,
         }}
       >
-        <button
-          onClick={onResend}
+        6-digit code
+      </label>
+
+      {/* Code input */}
+      <div style={{ position: 'relative', marginBottom: codeError ? 6 : 20 }}>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"  // triggers iOS/Android OTP autofill from email
+          value={code}
+          onChange={handleChange}
+          onPaste={handlePaste}
+          maxLength={6}
+          placeholder="000000"
+          disabled={verifying}
           style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--color-accent)',
+            width: '100%',
+            background: codeError ? 'rgba(255,77,109,0.06)' : 'var(--color-surface-2)',
+            border: `1px solid ${
+              codeError
+                ? 'var(--color-danger)'
+                : verifying
+                  ? 'var(--color-primary-line)'
+                  : 'var(--color-line-2)'
+            }`,
+            borderRadius: 14,
+            padding: '18px 16px',
+            color: 'var(--color-text)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 32,
+            letterSpacing: '10px',
+            textAlign: 'center',
+            fontVariantNumeric: 'tabular-nums',
+            outline: 'none',
+            boxSizing: 'border-box',
+            opacity: verifying ? 0.6 : 1,
+            transition: 'border-color 0.15s, background 0.15s, opacity 0.15s',
+          }}
+        />
+        {/* Inline verifying spinner — right-anchored inside the input */}
+        {verifying && (
+          <div
+            style={{
+              position: 'absolute',
+              right: 14,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              border: '2px solid var(--color-line-3)',
+              borderTopColor: 'var(--color-primary)',
+              animation: 'login-spin 0.9s linear infinite',
+            }}
+          />
+        )}
+      </div>
+
+      {/* Inline code error — wrong/expired code feedback */}
+      {codeError && (
+        <p
+          style={{
             fontFamily: 'var(--font-body)',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 600,
-            cursor: 'pointer',
-            padding: '8px 16px',
+            fontSize: 12,
+            color: 'var(--color-danger)',
+            margin: '0 0 20px',
+            lineHeight: 1.4,
           }}
         >
-          Resend link
-        </button>
+          {codeError}
+        </p>
+      )}
+
+      {/* Secondary actions */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+        {/* Resend — disabled for 30s after each send; shows live countdown */}
         <button
-          onClick={onResetToEntry}
+          onClick={onResend}
+          disabled={!canResend}
           style={{
             background: 'transparent',
             border: 'none',
-            color: 'var(--color-text-tertiary)',
-            fontFamily: 'var(--font-body)',
-            fontSize: 'var(--text-sm)',
-            cursor: 'pointer',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: '1.2px',
+            textTransform: 'uppercase',
+            color: canResend ? 'var(--color-primary)' : 'var(--color-text-mute)',
+            cursor: canResend ? 'pointer' : 'default',
             padding: '8px 16px',
+            transition: 'color 0.2s',
+          }}
+        >
+          {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+        </button>
+
+        <button
+          onClick={onReset}
+          disabled={verifying}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            fontFamily: 'var(--font-body)',
+            fontSize: 13,
+            color: 'var(--color-text-mute)',
+            cursor: verifying ? 'default' : 'pointer',
+            padding: '4px 16px',
           }}
         >
           Use a different email
         </button>
       </div>
-
-      {/* Helper */}
-      <p
-        style={{
-          marginTop: 'var(--space-6)',
-          fontSize: 'var(--text-xs)',
-          color: 'var(--color-text-tertiary)',
-          lineHeight: 1.5,
-        }}
-      >
-        Didn't get it? Check your spam folder, or wait a minute and try again.
-      </p>
     </div>
   )
 }
