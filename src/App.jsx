@@ -10,7 +10,8 @@ import VehicleSheet from './components/VehicleSheet'
 import AppShell from './components/AppShell'
 import TabBar from './design-system/primitives/TabBar.jsx'
 import PendingReviewBanner from './components/PendingReviewBanner'
-import { DashboardSkeleton } from './components/Skeletons'
+// DashboardSkeleton import removed — no longer used (legacy vehiclesLoading
+// fallback replaced with <LoadingScreen />; see fix below).
 import { useAuth } from './hooks/useAuth'
 import { useVehicles } from './hooks/useVehicles'
 import { useServiceRecords } from './hooks/useServiceRecords'
@@ -312,24 +313,11 @@ function SignedInApp({ user, onSignOut }) {
 
   // ─── Render ────────────────────────────────────────────────
 
-  if (vehiclesLoading) {
-    return (
-      <AppShell
-        screen="home"
-        onNavigate={navigate}
-        vehicles={[]}
-        activeVehicle={0}
-        onSelectVehicle={() => {}}
-        onAddVehicle={() => {}}
-        onOpenAccount={() => {}}
-        user={user}
-        mobileHeader={<AppHeader screen="home" onNavigate={navigate} onOpenAccount={() => {}} />}
-        mobileNav={null}
-      >
-        <DashboardSkeleton />
-      </AppShell>
-    )
-  }
+  // While vehicles are loading, show the branded loading screen — same as the
+  // auth-loading gate above. Previously this rendered the legacy AppShell with
+  // <DashboardSkeleton />, which caused the "Garage / Service / Records" sidebar
+  // to flash on hard refresh before the real v2 UI painted.
+  if (vehiclesLoading) return <LoadingScreen />
 
   if (needsOnboarding) {
     return <OnboardingScreen onComplete={handleOnboardingComplete} />
