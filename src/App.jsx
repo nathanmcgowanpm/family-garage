@@ -7,11 +7,7 @@ import OnboardingScreen from './OnboardingScreen'
 import LoginScreen from './LoginScreen'
 import AccountMenu from './components/AccountMenu'
 import VehicleSheet from './components/VehicleSheet'
-import AppShell from './components/AppShell'
-import TabBar from './design-system/primitives/TabBar.jsx'
 import PendingReviewBanner from './components/PendingReviewBanner'
-// DashboardSkeleton import removed — no longer used (legacy vehiclesLoading
-// fallback replaced with <LoadingScreen />; see fix below).
 import { useAuth } from './hooks/useAuth'
 import { useVehicles } from './hooks/useVehicles'
 import { useServiceRecords } from './hooks/useServiceRecords'
@@ -38,69 +34,12 @@ function toDisplay(row) {
   }
 }
 
-// ─── Shared UI pieces ────────────────────────────────────────
-
-function Icon({ name, fill = false, className = '', style = {} }) {
-  return (
-    <span className={`msym ${fill ? 'msym-fill' : ''} ${className}`} style={style}>
-      {name}
-    </span>
-  )
-}
-
-function AppHeader({ screen, onNavigate, onOpenAccount }) {
-  if (screen === 'onboarding') return null
-
-  return (
-    <header
-      style={{
-        background: 'rgba(10,13,16,0.85)',
-        backdropFilter: 'blur(20px)',
-        position: 'fixed', top: 0, width: '100%', zIndex: 50,
-        borderBottom: '1px solid var(--color-border-subtle)',
-      }}
-    >
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0 20px', height:64, maxWidth:672, margin:'0 auto' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }} onClick={() => onNavigate('dashboard')}>
-          <span style={{ fontFamily:'var(--font-display)', fontSize:14, fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' }}>
-            <span style={{ color: 'var(--color-text-primary)' }}>Family </span>
-            <span style={{ color: 'var(--color-accent)' }}>Garage</span>
-          </span>
-        </div>
-        <button
-          onClick={onOpenAccount}
-          title="Account"
-          style={{
-            width:32, height:32, borderRadius:'50%',
-            border:'1px solid var(--color-border-subtle)',
-            background:'var(--color-bg-surface)',
-            display:'flex', alignItems:'center', justifyContent:'center',
-            cursor:'pointer',
-          }}
-        >
-          <Icon name="person" style={{ color:'var(--color-text-secondary)', fontSize:17 }} />
-        </button>
-      </div>
-    </header>
-  )
-}
-
-
-function DefenseScreen() {
-  return (
-    <div className="animate-page-in" style={{ paddingTop: 88, paddingBottom: 100, paddingLeft: 20, paddingRight: 20 }}>
-      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', fontWeight: 600, margin:'0 0 16px' }}>Defense Report</h2>
-      <p style={{ color: 'var(--color-text-secondary)' }}>Defense report screen — still needs migration.</p>
-    </div>
-  )
-}
-
 function LoadingScreen() {
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--color-text-tertiary)' }}>
-        <span style={{ color: 'var(--color-text-primary)' }}>Family </span>
-        <span style={{ color: 'var(--color-accent)' }}>Garage</span>
+    <div style={{ minHeight: '100vh', background: 'var(--color-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--color-text-mute)' }}>
+        <span style={{ color: 'var(--color-text)' }}>Family </span>
+        <span style={{ color: 'var(--color-primary)' }}>Garage</span>
       </div>
     </div>
   )
@@ -173,13 +112,16 @@ function SignedInApp({ user, onSignOut }) {
   // No vehicles yet? Show onboarding instead of the dashboard.
   const needsOnboarding = !vehiclesLoading && vehicles.length === 0
 
-  async function handleOnboardingComplete({ year, make, model, miles, nickname }) {
+  async function handleOnboardingComplete({ year, make, model, trim, nickname, vin, license_plate, miles }) {
     const milesRaw = parseInt(String(miles).replace(/,/g, '')) || 0
     const { error } = await addVehicle({
-      year: parseInt(year) || null,
-      make: make || '',
-      model: model || '',
-      nickname: nickname || null,
+      year:            parseInt(year) || null,
+      make:            make || '',
+      model:           model || '',
+      trim:            trim || null,
+      nickname:        nickname || null,
+      vin:             vin || null,
+      license_plate:   license_plate || null,
       current_mileage: milesRaw,
       mileage_updated_at: new Date().toISOString(),
     })
@@ -323,17 +265,6 @@ function SignedInApp({ user, onSignOut }) {
     return <OnboardingScreen onComplete={handleOnboardingComplete} />
   }
 
-  // v2 screens host their own AppShell + TabBar — they bypass the legacy
-  // chrome entirely. Legacy screens keep the legacy AppShell wrapper, but
-  // its mobile bottom-nav slot is now the v2 TabBar so the navigation
-  // experience is consistent across the migration.
-  const isV2Screen =
-    screen === 'home' ||
-    screen === 'fleet' ||
-    screen === 'schedule' ||
-    screen === 'history' ||
-    screen === 'import'
-
   const sharedV2Props = {
     user,
     vehicles,
@@ -344,95 +275,56 @@ function SignedInApp({ user, onSignOut }) {
     onOpenAccount: () => setAccountOpen(true),
   }
 
-  // Tab-bar active state for legacy screens (v2 screens render their own
-  // TabBar). Only DefenseScreen uses the legacy wrapper now.
-  const legacyActiveTab = null
-
   function renderSurface() {
-    if (isV2Screen) {
-      if (screen === 'home') {
-        return (
-          <HomeScreen
-            {...sharedV2Props}
-            serviceRecords={serviceRecords}
-            onUpdateRecord={updateRecord}
-            onDeleteRecord={deleteRecord}
-            pendingBanner={
-              <PendingReviewBanner
-                records={pendingRecords}
-                vehicles={vehicles}
-                onConfirm={confirmPending}
-                onUpdate={updatePending}
-                onDismiss={dismissPending}
-              />
-            }
-          />
-        )
-      }
-      if (screen === 'fleet') return <FleetScreen {...sharedV2Props} />
-      if (screen === 'import') {
-        return (
-          <ImportScreen
-            user={user}
-            vehicles={vehicles}
-            activeVehicleId={activeVehicleId}
-            onFinalize={handleFinalizeRecord}
-            saving={recordSaving}
-            onNavigate={navigate}
-            onOpenAccount={() => setAccountOpen(true)}
-          />
-        )
-      }
-      if (screen === 'schedule') {
-        return (
-          <ScheduleScreen
-            {...sharedV2Props}
-            serviceRecords={serviceRecords}
-          />
-        )
-      }
-      // 'history'
+    if (screen === 'home') {
       return (
-        <HistoryScreen
+        <HomeScreen
           {...sharedV2Props}
           serviceRecords={serviceRecords}
           onUpdateRecord={updateRecord}
           onDeleteRecord={deleteRecord}
+          pendingBanner={
+            <PendingReviewBanner
+              records={pendingRecords}
+              vehicles={vehicles}
+              onConfirm={confirmPending}
+              onUpdate={updatePending}
+              onDismiss={dismissPending}
+            />
+          }
         />
       )
     }
-
-    // Legacy screens — wrap in legacy AppShell + new TabBar
+    if (screen === 'fleet') return <FleetScreen {...sharedV2Props} />
+    if (screen === 'import') {
+      return (
+        <ImportScreen
+          user={user}
+          vehicles={vehicles}
+          activeVehicleId={activeVehicleId}
+          onFinalize={handleFinalizeRecord}
+          saving={recordSaving}
+          onNavigate={navigate}
+          onOpenAccount={() => setAccountOpen(true)}
+        />
+      )
+    }
+    if (screen === 'schedule') {
+      return (
+        <ScheduleScreen
+          {...sharedV2Props}
+          serviceRecords={serviceRecords}
+        />
+      )
+    }
+    // 'history' (default)
     return (
-      <AppShell
-        screen={screen}
-        onNavigate={navigate}
-        vehicles={vehicles}
-        activeVehicle={activeVehicle}
-        onSelectVehicle={setActiveVehicleIdx}
-        onAddVehicle={() => setVehicleSheet('add')}
-        onOpenAccount={() => setAccountOpen(true)}
-        user={user}
-        mobileHeader={
-          <AppHeader
-            screen={screen}
-            onNavigate={navigate}
-            onOpenAccount={() => setAccountOpen(true)}
-          />
-        }
-        mobileNav={
-          <TabBar
-            active={legacyActiveTab}
-            onHome={() => navigate('home')}
-            onFleet={() => navigate('fleet')}
-            onFab={() => navigate('import')}
-            onNext={() => navigate('schedule')}
-            onMe={() => setAccountOpen(true)}
-          />
-        }
-      >
-        {screen === 'defense' && <DefenseScreen />}
-      </AppShell>
+      <HistoryScreen
+        {...sharedV2Props}
+        serviceRecords={serviceRecords}
+        onUpdateRecord={updateRecord}
+        onDeleteRecord={deleteRecord}
+      />
     )
   }
 
