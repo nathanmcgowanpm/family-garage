@@ -94,34 +94,8 @@
   animation: shimmer 2s infinite;
 }
 
-@keyframes scan {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(1000%); }
-}
-
-.scanning-line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(to right, transparent, var(--color-accent), transparent);
-  box-shadow: 0 0 12px var(--color-accent);
-  z-index: 1;
-}
-
-.animate-scan {
-  animation: scan 2s ease-in-out infinite;
-}
-
-.technical-card {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  transition: border-color var(--duration-base, 250ms) var(--ease-out, ease);
-}
-
-.technical-card:hover {
-  border-color: var(--color-border-default);
-}
+/* .scanning-line, .animate-scan, @keyframes scan — removed (dead classes, no live JSX consumer) */
+/* .technical-card — removed (dead class, no live JSX consumer) */
 
 /* ============================================================
    DATE INPUT — dark-theme polish for <input type="date">
@@ -141,8 +115,11 @@ input[type="date"] {
 }
 
 input[type="date"]:focus {
-  border-color: var(--color-border-accent-strong);
-  box-shadow: var(--glow-accent-sm);
+  /* Migrated to v2 Arctic Signal tokens:
+     --color-border-accent-strong → --color-primary (exact cyan, was equivalent)
+     --glow-accent-sm → --shadow-primary-glow (same cyan glow)              */
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-primary-glow);
 }
 
 /* Default calendar glyph is dark — invert + dim it so it reads as a
