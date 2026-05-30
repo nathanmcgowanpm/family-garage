@@ -175,8 +175,38 @@ export const MAINTENANCE_ITEMS = [
 export const LEAD_MILES = 10000
 
 /**
+ * Resolve the effective interval/milestone mileage for a maintenance item,
+ * preferring the vehicle's OEM-specific value over the generic seed data.
+ *
+ * For recurring items (kind: 'recurring'), the resolved value is the
+ * between-service interval in miles.
+ * For milestone items (kind: 'milestone'), it is both the first-occurrence
+ * target AND the recurrence interval (dueAroundMiles === intervalMiles in
+ * the seed data; OEM replaces both with one number).
+ *
+ * Returns null when neither OEM nor generic data is available (only wiper-blades
+ * with no OEM spec reaches this path — handled downstream with || Infinity).
+ *
+ * @param {Object} item - A MAINTENANCE_ITEMS entry
+ * @param {Object|null} vehicle - Display-shape vehicle from toDisplay()
+ * @returns {number|null}
+ */
+function resolveItemMiles(item, vehicle) {
+  const oemValue = vehicle?.oem_intervals?.[item.id]
+  if (typeof oemValue === 'number' && oemValue > 0) return oemValue
+  return item.intervalMiles ?? item.dueAroundMiles ?? null
+}
+
+/**
  * Compute service status for a vehicle's current mileage.
  * Returns items with computed due state for sorting/filtering.
+ *
+ * When `vehicle` is supplied (recommended), its `oem_intervals` map is
+ * consulted first for each item's interval — e.g. a Jeep Wrangler may have
+ * oil-change: 10000 instead of the generic 5000. The resolved value is also
+ * written back onto the returned item's `intervalMiles` and `dueAroundMiles`
+ * fields so downstream display consumers (intervalText, mileage tape markers)
+ * stay consistent with the computation.
  *
  * Services with no logged history are reported as `'no-baseline'`,
  * NOT `'overdue'`. Without a baseline mileage we don't know when the
@@ -193,9 +223,15 @@ export const LEAD_MILES = 10000
  *   currentMileage < lowerBound               → 'milestone-upcoming'  (approaching window)
  *   currentMileage <= upperBound              → 'consider-now'        (in window, amber)
  *   currentMileage > upperBound               → 'likely-overdue'      (past window, amber)
+ *
+ * @param {number} currentMileage
+ * @param {Object} lastServicedMap - { [itemId]: lastMileage }
+ * @param {Object|null} vehicle - Display-shape vehicle (includes oem_intervals). Optional.
  */
-export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
+export function computeServiceStatus(currentMileage, lastServicedMap = {}, vehicle = null) {
   return MAINTENANCE_ITEMS.map((item) => {
+    const resolvedMiles = resolveItemMiles(item, vehicle)
+
     const hasHistory = Object.prototype.hasOwnProperty.call(
       lastServicedMap,
       item.id,
@@ -203,12 +239,14 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
     const lastServicedAt = hasHistory ? lastServicedMap[item.id] : null
 
     if (item.kind === 'milestone') {
-      const lowerBound = item.dueAroundMiles * 0.8
-      const upperBound = item.dueAroundMiles * 1.2
+      // Use the resolved (OEM or generic) mileage as the window center.
+      const effectiveDue = resolvedMiles ?? item.dueAroundMiles
+      const lowerBound = effectiveDue * 0.8
+      const upperBound = effectiveDue * 1.2
 
       if (hasHistory) {
-        // Milestone with a logged service → predict next occurrence like recurring
-        const nextDueAt = lastServicedAt + item.intervalMiles
+        // Milestone with a logged service → predict next occurrence like recurring.
+        const nextDueAt = lastServicedAt + effectiveDue
         const milesUntilDue = nextDueAt - currentMileage
         let status
         if (milesUntilDue < 0) status = 'overdue'
@@ -216,6 +254,10 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
         else status = 'upcoming'
         return {
           ...item,
+          // Override seed-data fields with resolved values so display consumers
+          // (intervalText, milestone markers) stay consistent with the computation.
+          intervalMiles: effectiveDue,
+          dueAroundMiles: effectiveDue,
           hasHistory,
           lastServicedAt,
           nextDueAt,
@@ -238,6 +280,8 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
 
       return {
         ...item,
+        intervalMiles: effectiveDue,
+        dueAroundMiles: effectiveDue,
         hasHistory,
         lastServicedAt,
         nextDueAt: null,
@@ -248,9 +292,10 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
       }
     }
 
-    // Recurring item — existing logic unchanged
+    // Recurring item
+    const effectiveInterval = resolvedMiles  // null for wiper-blades with no OEM spec
     const nextDueAt = hasHistory
-      ? lastServicedAt + (item.intervalMiles || Infinity)
+      ? lastServicedAt + (effectiveInterval || Infinity)
       : null
     const milesUntilDue = hasHistory ? nextDueAt - currentMileage : null
 
@@ -267,6 +312,8 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
 
     return {
       ...item,
+      // Override with resolved interval for consistent display text.
+      intervalMiles: effectiveInterval,
       hasHistory,
       lastServicedAt,
       nextDueAt,

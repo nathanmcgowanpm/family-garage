@@ -12,7 +12,7 @@ import { useAuth } from './hooks/useAuth'
 import { useVehicles } from './hooks/useVehicles'
 import { useServiceRecords } from './hooks/useServiceRecords'
 import { usePendingRecords } from './hooks/usePendingRecords'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 // ─── Vehicle shape adapters ──────────────────────────────────
 // The UI components were built around a flat display shape:
@@ -108,13 +108,62 @@ function SignedInApp({ user, onSignOut }) {
     window.scrollTo(0, 0)
   }
 
+  // ─── OEM interval fetch ────────────────────────────────────
+  // Fire-and-forget after any vehicle save. Does NOT block the save.
+  // On success, updateVehicle sets oem_intervals on the row (optimistic),
+  // which re-renders the advisor with manufacturer-specific intervals.
+  // On any failure, the vehicle's oem_intervals stays null and the advisor
+  // falls back to generic intervals indefinitely — no retry storm.
+  const fetchingIntervalsRef = useRef(new Set())
+
+  async function fetchAndStoreOemIntervals(vehicle) {
+    const { id, year, make, model, trim } = vehicle
+    if (!year || !make || !model) return  // can't fetch without YMMT
+    if (fetchingIntervalsRef.current.has(id)) return  // already in-flight this session
+    fetchingIntervalsRef.current.add(id)
+    try {
+      const res = await fetch('/api/fetch-vehicle-intervals', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ year, make, model, trim }),
+      })
+      if (!res.ok) {
+        console.warn(`OEM intervals fetch failed for vehicle ${id}: HTTP ${res.status}`)
+        return
+      }
+      const { intervals } = await res.json()
+      // Store the result even if intervals is {} — that marks the vehicle
+      // as "fetched but no OEM data" and prevents redundant future fetches.
+      const { error } = await updateVehicle(id, { oem_intervals: intervals })
+      if (error) console.warn(`Failed to store OEM intervals for vehicle ${id}:`, error)
+    } catch (err) {
+      console.warn(`OEM intervals fetch error for vehicle ${id}:`, err)
+    }
+  }
+
+  // ─── Backfill: fetch OEM intervals for existing null-interval vehicles ─
+  // Runs whenever rawVehicles changes (e.g. on initial load). Vehicles that
+  // already have oem_intervals (including {}) are skipped. The fetchingIntervalsRef
+  // Set prevents duplicate in-flight requests within a session.
+  useEffect(() => {
+    if (vehiclesLoading) return
+    for (const vehicle of rawVehicles) {
+      if (vehicle.oem_intervals === null || vehicle.oem_intervals === undefined) {
+        fetchAndStoreOemIntervals(vehicle)
+      }
+    }
+    // fetchAndStoreOemIntervals closes over updateVehicle which is stable
+    // across renders where rawVehicles hasn't changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawVehicles, vehiclesLoading])
+
   // ─── Empty-state onboarding ────────────────────────────────
   // No vehicles yet? Show onboarding instead of the dashboard.
   const needsOnboarding = !vehiclesLoading && vehicles.length === 0
 
   async function handleOnboardingComplete({ year, make, model, trim, nickname, vin, license_plate, miles }) {
     const milesRaw = parseInt(String(miles).replace(/,/g, '')) || 0
-    const { error } = await addVehicle({
+    const { data: newVehicle, error } = await addVehicle({
       year:            parseInt(year) || null,
       make:            make || '',
       model:           model || '',
@@ -129,6 +178,9 @@ function SignedInApp({ user, onSignOut }) {
       alert(`Could not save vehicle: ${error.message}`)
       return
     }
+    // Fire OEM interval fetch after save — does not block navigation.
+    // The advisor will re-render silently when intervals arrive.
+    fetchAndStoreOemIntervals(newVehicle)
     setActiveVehicleIdx(0)
     navigate('home')
   }
@@ -215,7 +267,24 @@ function SignedInApp({ user, onSignOut }) {
       patch.mileage_updated_at = mileage_updated_at ?? new Date().toISOString()
     }
     const { error } = await updateVehicle(row.id, patch)
-    if (error) alert(`Could not update vehicle: ${error.message}`)
+    if (error) {
+      alert(`Could not update vehicle: ${error.message}`)
+      return
+    }
+    // If year/make/model/trim changed, the existing OEM intervals are stale.
+    // Clear them and re-fetch. Nickname, VIN, plate, and mileage changes
+    // don't affect the maintenance schedule, so they don't trigger a re-fetch.
+    const ymmt_changed =
+      (patch.year  !== undefined && patch.year  !== row.year)  ||
+      (patch.make  !== undefined && patch.make  !== row.make)  ||
+      (patch.model !== undefined && patch.model !== row.model) ||
+      (patch.trim  !== undefined && patch.trim  !== row.trim)
+    if (ymmt_changed) {
+      // Wipe stale intervals so the vehicle re-enters the backfill effect.
+      await updateVehicle(row.id, { oem_intervals: null })
+      // Remove from in-flight guard so the backfill effect can re-fetch.
+      fetchingIntervalsRef.current.delete(row.id)
+    }
   }
 
   async function handleArchiveVehicle(index) {
@@ -245,7 +314,7 @@ function SignedInApp({ user, onSignOut }) {
       ? newVehicle.year
       : parseInt(newVehicle.year) || null
 
-    const { error } = await addVehicle({
+    const { data: savedVehicle, error } = await addVehicle({
       year:                yearInt,
       make:                newVehicle.make ?? '',
       model:               newVehicle.model ?? '',
@@ -260,6 +329,8 @@ function SignedInApp({ user, onSignOut }) {
       alert(`Could not add vehicle: ${error.message}`)
       return
     }
+    // Fire OEM interval fetch — does not block sheet close.
+    fetchAndStoreOemIntervals(savedVehicle)
     setActiveVehicleIdx(rawVehicles.length)  // newly added row will land at end
   }
 

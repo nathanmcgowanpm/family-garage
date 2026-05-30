@@ -87,7 +87,7 @@ export default function HomeScreen({
   //   with a tilde, amber color, and reduced opacity. milestone-distant
   //   items stay suppressed (consistent with road-ahead filter).
   const lastServicedMap = buildLastServicedMap(serviceRecords)
-  const allServices = computeServiceStatus(currentMileage, lastServicedMap).sort(
+  const allServices = computeServiceStatus(currentMileage, lastServicedMap, v).sort(
     sortByUrgency,
   )
 

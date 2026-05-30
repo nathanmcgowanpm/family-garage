@@ -71,7 +71,7 @@ export default function ScheduleScreen({
     'milestone-upcoming',
   ])
 
-  const filtered = computeServiceStatus(currentMileage, lastServicedMap)
+  const filtered = computeServiceStatus(currentMileage, lastServicedMap, v)
     .filter((s) => {
       if (ALWAYS_SHOW.has(s.status)) return true
       return Number.isFinite(s.nextDueAt) && s.nextDueAt <= horizonCutoff
