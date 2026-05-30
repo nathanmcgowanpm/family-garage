@@ -167,8 +167,18 @@ function SignedInApp({ user, onSignOut }) {
       mileage_at_service,
       cost_cents,
       notes: parsedData.notes || null,
-      line_items: Array.isArray(parsedData.line_items) ? parsedData.line_items : null,
+      // Normalize to text[] of JSON strings — same shape as the email-forward
+      // path (inbound-email.js uses normalizeLineItems for consistency).
+      line_items: Array.isArray(parsedData.line_items)
+        ? parsedData.line_items.map((item) =>
+            typeof item === 'string' ? item : JSON.stringify(item)
+          )
+        : null,
       raw_parsed_data: parsedData,
+      // categories: AI-assigned at parse time. Flows in from parse-receipt
+      // response via ImportScreen → ReceiptForm → onFinalize spread.
+      // null if the field is missing for any reason (not a hard failure).
+      categories: Array.isArray(parsedData.categories) ? parsedData.categories : null,
       source: 'upload',
       status: 'confirmed',
       // If user reassigned via the dropdown, override the

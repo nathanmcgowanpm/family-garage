@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { buildReceiptParseRequest, extractParsedReceipt } from '../shared/receiptParsing.js'
+import { buildReceiptParseRequest, extractParsedReceipt, normalizeLineItems } from '../shared/receiptParsing.js'
 
 // Initialize Supabase admin client (bypasses RLS via service role key).
 const supabaseAdmin = createClient(
@@ -229,17 +229,16 @@ if (providedToken !== expectedSecret) {
           cost_cents: parsed.cost
             ? Math.round(parseFloat(String(parsed.cost).replace(/[^\d.]/g, '')) * 100) || null
             : null,
-          line_items: Array.isArray(parsed.line_items)
-            ? parsed.line_items.map((item) =>
-                typeof item === 'string' ? item : JSON.stringify(item)
-              )
-            : [],
+          line_items: normalizeLineItems(parsed.line_items),
           raw_parsed_data: parsed,
           notes: parsed.notes || null,
           source: 'email_forward',
           status: 'pending_review',
           match_confidence: matchConfidence,
           match_reason: matchReason,
+          // categories: AI-assigned at parse time. extractParsedReceipt
+          // guarantees this is a validated string[] (may be []).
+          categories: parsed.categories,
         })
 
       if (recordError) {

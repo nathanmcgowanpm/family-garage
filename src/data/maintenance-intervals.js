@@ -278,37 +278,62 @@ export function computeServiceStatus(currentMileage, lastServicedMap = {}) {
 
 /**
  * Map service-record rows to a `{ itemId: lastMileage }` lookup so the
- * predictor knows when each maintenance item was most recently
- * performed. Matching is keyword-based (e.g. a record with
- * `service_type` "Synthetic Oil Change" maps to `oil-change`). This is
- * the same stub matcher the legacy ScheduleScreen used inline; lifted
- * here so HomeScreen can reuse it without duplicating logic.
+ * predictor knows when each maintenance item was most recently performed.
+ *
+ * Primary path: reads record.categories (string[] set by Claude at log time).
+ * A record with categories ["oil-change","tire-rotation"] updates both baselines.
+ *
+ * Legacy fallback: for records where categories is NULL (pre-categorization
+ * rows), falls back to keyword matching against SERVICE_KEYWORDS. This branch
+ * will be unreachable once all records have been backfilled with categories.
+ */
+
+/**
+ * @deprecated Keyword matching is used only as a legacy fallback for
+ * service_records where categories is NULL. New records are categorized
+ * by Claude at log time and this map is no longer the primary path.
+ * Remove after a full backfill of existing records clears categories = NULL.
  */
 const SERVICE_KEYWORDS = {
-  'oil-change':        ['oil change', 'oil & filter', 'synthetic oil'],
-  'tire-rotation':     ['tire rotation', 'tire rotate', 'rotate and balance'],
-  'brake-fluid-flush': ['brake fluid', 'brake flush'],
-  'engine-air-filter': ['engine air filter', 'air filter'],
-  'cabin-air-filter':  ['cabin air', 'cabin filter'],
-  'coolant-flush':     ['coolant', 'antifreeze'],
-  'transmission-fluid':['transmission fluid', 'trans fluid'],
-  'wheel-alignment':   ['alignment'],
-  'battery-test':      ['battery test', 'battery check'],
-  'spark-plugs':       ['spark plug'],
-  'wiper-blades':      ['wiper', 'wiper blade'],
-  'brake-pads':        ['brake pad'],
+  'oil-change':         ['oil change', 'oil & filter', 'synthetic oil'],
+  'tire-rotation':      ['tire rotation', 'tire rotate', 'rotate and balance'],
+  'brake-fluid-flush':  ['brake fluid', 'brake flush'],
+  'engine-air-filter':  ['engine air filter', 'air filter'],
+  'cabin-air-filter':   ['cabin air', 'cabin filter'],
+  'coolant-flush':      ['coolant', 'antifreeze'],
+  'transmission-fluid': ['transmission fluid', 'trans fluid'],
+  'wheel-alignment':    ['alignment'],
+  'battery-test':       ['battery test', 'battery check'],
+  'spark-plugs':        ['spark plug'],
+  'wiper-blades':       ['wiper', 'wiper blade'],
+  'brake-pads':         ['brake pad'],
 }
 
 export function buildLastServicedMap(records = []) {
   const map = {}
   for (const record of records) {
-    const name = (record.service_type || '').toLowerCase()
     const mileage = record.mileage_at_service ?? 0
     if (!mileage) continue
-    for (const [id, terms] of Object.entries(SERVICE_KEYWORDS)) {
-      if (terms.some((t) => name.includes(t))) {
-        if (!map[id] || mileage > map[id]) {
-          map[id] = mileage
+
+    if (record.categories !== null && record.categories !== undefined) {
+      // New path: use AI-assigned categories. A record with multiple
+      // categories (e.g. ["oil-change","tire-rotation"]) updates all of them.
+      const cats = Array.isArray(record.categories) ? record.categories : []
+      for (const catId of cats) {
+        if (!map[catId] || mileage > map[catId]) {
+          map[catId] = mileage
+        }
+      }
+    } else {
+      // Legacy fallback: keyword matching for records where categories is NULL
+      // (rows created before Phase 2.5b). Hit rate drops to zero once all
+      // existing records have categories populated.
+      const name = (record.service_type || '').toLowerCase()
+      for (const [id, terms] of Object.entries(SERVICE_KEYWORDS)) {
+        if (terms.some((t) => name.includes(t))) {
+          if (!map[id] || mileage > map[id]) {
+            map[id] = mileage
+          }
         }
       }
     }
