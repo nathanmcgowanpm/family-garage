@@ -163,7 +163,7 @@ function SignedInApp({ user, onSignOut }) {
 
   async function handleOnboardingComplete({ year, make, model, trim, nickname, vin, license_plate, miles }) {
     const milesRaw = parseInt(String(miles).replace(/,/g, '')) || 0
-    const { data: newVehicle, error } = await addVehicle({
+    const { error } = await addVehicle({
       year:            parseInt(year) || null,
       make:            make || '',
       model:           model || '',
@@ -178,9 +178,10 @@ function SignedInApp({ user, onSignOut }) {
       alert(`Could not save vehicle: ${error.message}`)
       return
     }
-    // Fire OEM interval fetch after save — does not block navigation.
-    // The advisor will re-render silently when intervals arrive.
-    fetchAndStoreOemIntervals(newVehicle)
+    // The backfill useEffect detects oem_intervals === null on the new vehicle
+    // and calls fetchAndStoreOemIntervals after React re-renders — at which
+    // point updateVehicle's closure has the correct vehicle list and any
+    // rollback on error won't wipe the newly added vehicle from UI state.
     setActiveVehicleIdx(0)
     navigate('home')
   }
@@ -314,7 +315,7 @@ function SignedInApp({ user, onSignOut }) {
       ? newVehicle.year
       : parseInt(newVehicle.year) || null
 
-    const { data: savedVehicle, error } = await addVehicle({
+    const { error } = await addVehicle({
       year:                yearInt,
       make:                newVehicle.make ?? '',
       model:               newVehicle.model ?? '',
@@ -329,8 +330,8 @@ function SignedInApp({ user, onSignOut }) {
       alert(`Could not add vehicle: ${error.message}`)
       return
     }
-    // Fire OEM interval fetch — does not block sheet close.
-    fetchAndStoreOemIntervals(savedVehicle)
+    // The backfill useEffect handles OEM interval fetch — runs after re-render
+    // so updateVehicle closure has the correct (post-insertion) vehicle list.
     setActiveVehicleIdx(rawVehicles.length)  // newly added row will land at end
   }
 

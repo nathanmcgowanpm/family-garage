@@ -179,7 +179,32 @@ export default function MileageTape({
 
   // Label collision — minimum gap: 1,500 mi absolute or 8% of span, whichever is larger
   const tGap = Math.max(1_500 / totalSpan, 0.08)
-  const visibleLabels = pickVisibleLabels(placed, tGap, tNow)
+
+  // ── NOW exclusion pre-pass ────────────────────────────────────────────
+  // Any marker whose t-position is within tGap of tNow has its label
+  // suppressed unconditionally — NOW always wins. Their ticks still render.
+  // This runs BEFORE the general collision walk so excluded markers don't
+  // consume "slots" and can't pull distant markers into the cluster.
+  const nowExcluded = new Set(
+    placed.flatMap((m, i) => (Math.abs(m.t - tNow) < tGap ? [i] : []))
+  )
+
+  // ── General collision walk — non-excluded markers only ───────────────
+  // Filter to markers outside the NOW zone, run the existing bidirectional
+  // walk, then remap filtered indices back to placed indices.
+  const nonExcluded = placed
+    .map((m, i) => ({ m, origIdx: i }))
+    .filter(({ origIdx }) => !nowExcluded.has(origIdx))
+
+  const filteredVisible = pickVisibleLabels(
+    nonExcluded.map(({ m }) => m),
+    tGap,
+    tNow,
+  )
+
+  const visibleLabels = new Set(
+    [...filteredVisible].map((fi) => nonExcluded[fi].origIdx)
+  )
 
   // Anchor direction for the NOW label
   const nowAlign =

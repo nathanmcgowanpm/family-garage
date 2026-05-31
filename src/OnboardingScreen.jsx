@@ -22,6 +22,7 @@ export default function OnboardingScreen({ onComplete }) {
   // It holds { year, make, model, trim, nickname, vin, license_plate, current_mileage }.
   const [vehicleFields, setVehicleFields] = useState(null)
   const [miles, setMiles] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
 
   // Step 1: AddVehicleForm calls onSubmit → store fields → advance to step 2.
   function handleStep1(vehicleData) {
@@ -35,20 +36,29 @@ export default function OnboardingScreen({ onComplete }) {
   const canFinish = miles.trim().length > 0 && parseInt(miles.replace(/[^0-9]/g, ''), 10) > 0
 
   // Step 2: user clicks "Finish setup" → merge miles into vehicleFields → notify parent.
-  // The canFinish guard here is a second line of defence; the disabled button is the
-  // primary UX barrier.
-  function handleFinish() {
-    if (!canFinish) return
-    onComplete({
-      year:          vehicleFields?.year,
-      make:          vehicleFields?.make          || '',
-      model:         vehicleFields?.model         || '',
-      trim:          vehicleFields?.trim          || null,
-      nickname:      vehicleFields?.nickname      || null,
-      vin:           vehicleFields?.vin           || null,
-      license_plate: vehicleFields?.license_plate || null,
-      miles,
-    })
+  // isSaving prevents double-submit while the pessimistic addVehicle await is
+  // in flight. The disabled button is the primary UX barrier; canFinish + isSaving
+  // is the programmatic guard.
+  async function handleFinish() {
+    if (!canFinish || isSaving) return
+    setIsSaving(true)
+    try {
+      await onComplete({
+        year:          vehicleFields?.year,
+        make:          vehicleFields?.make          || '',
+        model:         vehicleFields?.model         || '',
+        trim:          vehicleFields?.trim          || null,
+        nickname:      vehicleFields?.nickname      || null,
+        vin:           vehicleFields?.vin           || null,
+        license_plate: vehicleFields?.license_plate || null,
+        miles,
+      })
+    } finally {
+      // On success we navigate away (component unmounts) — this is a no-op.
+      // On error, handleOnboardingComplete shows an alert and returns, so we
+      // restore the button so the user can correct and retry.
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -181,20 +191,20 @@ export default function OnboardingScreen({ onComplete }) {
               </button>
               <button
                 onClick={handleFinish}
-                disabled={!canFinish}
+                disabled={!canFinish || isSaving}
                 style={{
                   flex: 1,
-                  background: canFinish ? 'var(--gradient-primary-button)' : 'var(--color-surface)',
-                  color: canFinish ? 'var(--color-ink)' : 'var(--color-text-mute)',
+                  background: canFinish && !isSaving ? 'var(--gradient-primary-button)' : 'var(--color-surface)',
+                  color: canFinish && !isSaving ? 'var(--color-ink)' : 'var(--color-text-mute)',
                   fontFamily: 'var(--font-body)',
                   fontWeight: 700,
                   fontSize: 13,
                   padding: '14px 24px',
                   borderRadius: 12,
-                  border: canFinish ? 'none' : '1px solid var(--color-line-2)',
-                  cursor: canFinish ? 'pointer' : 'default',
-                  boxShadow: canFinish ? 'var(--shadow-primary-button)' : 'none',
-                  opacity: canFinish ? 1 : 0.5,
+                  border: canFinish && !isSaving ? 'none' : '1px solid var(--color-line-2)',
+                  cursor: canFinish && !isSaving ? 'pointer' : 'default',
+                  boxShadow: canFinish && !isSaving ? 'var(--shadow-primary-button)' : 'none',
+                  opacity: canFinish && !isSaving ? 1 : 0.5,
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -204,8 +214,8 @@ export default function OnboardingScreen({ onComplete }) {
                   transition: 'background 0.2s, box-shadow 0.2s, opacity 0.2s',
                 }}
               >
-                Finish setup
-                <span className="msym" style={{ fontSize: 18 }}>arrow_forward</span>
+                {isSaving ? 'Saving…' : 'Finish setup'}
+                {!isSaving && <span className="msym" style={{ fontSize: 18 }}>arrow_forward</span>}
               </button>
             </div>
 
