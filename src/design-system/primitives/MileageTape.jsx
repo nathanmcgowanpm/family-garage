@@ -206,6 +206,34 @@ export default function MileageTape({
     [...filteredVisible].map((fi) => nonExcluded[fi].origIdx)
   )
 
+  // ── DIAGNOSTIC — remove before ship ─────────────────────────────────
+  if (typeof window !== 'undefined') {
+    console.group('[MileageTape] render diagnostics')
+    console.log('range    rangeStart=%o  rangeEnd=%o  totalSpan=%o', rangeStart, rangeEnd, totalSpan)
+    console.log('tNow     %o  (nowAlign will be %o)',
+      tNow.toFixed(4),
+      tNow > 0.75 ? 'right' : tNow < 0.25 ? 'left' : 'center'
+    )
+    console.log('tGap     %o  (%o mi)', tGap.toFixed(4), (tGap * totalSpan).toFixed(0))
+    console.log('markers  (placed, sorted by t):')
+    placed.forEach((m, i) => {
+      const dist = Math.abs(m.t - tNow)
+      console.log(
+        '  [%d] %-30s mileage=%o  t=%o  |t-tNow|=%o  %s',
+        i,
+        m.label,
+        m.mileage,
+        m.t.toFixed(4),
+        dist.toFixed(4),
+        dist < tGap ? '← NOW-EXCLUDED' : visibleLabels.has(i) ? '← LABEL SHOWN' : '← label suppressed (collision)',
+      )
+    })
+    console.log('nowExcluded indices:', [...nowExcluded])
+    console.log('visibleLabels indices:', [...visibleLabels])
+    console.groupEnd()
+  }
+  // ── END DIAGNOSTIC ───────────────────────────────────────────────────
+
   // Anchor direction for the NOW label
   const nowAlign =
     tNow > 0.75 ? 'right' : tNow < 0.25 ? 'left' : 'center'
