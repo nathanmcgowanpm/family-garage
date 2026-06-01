@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/react'
 import HomeScreen from './screens/HomeScreen.jsx'
 import FleetScreen from './screens/FleetScreen.jsx'
 import ScheduleScreen from './screens/ScheduleScreen.jsx'
@@ -61,7 +62,12 @@ export default function App() {
 
   if (loading) return <LoadingScreen />
   if (!user) return <LoginScreen />
-  return <SignedInApp user={user} onSignOut={signOut} />
+  return (
+  <>
+    <SignedInApp user={user} onSignOut={signOut} />
+    <Analytics />
+  </>
+)
 }
 
 function SignedInApp({ user, onSignOut }) {
