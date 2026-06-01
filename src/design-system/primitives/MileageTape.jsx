@@ -23,9 +23,11 @@
  *   Empty-marker fallback: forward-biased 10k window (NOW at ~25%).
  *
  * Label collision:
- *   Bidirectional walk from tNow — right-of-NOW left→right, left-of-NOW
- *   right→left. Precise markers beat approximate; amber beats neutral.
- *   The minimum gap between visible labels is max(1,500 mi, 8% of span).
+ *   Pixel-edge walk — labels are sized by estimated text width (7px/char,
+ *   capped at 110px) and positioned by their CSS anchor (center or right).
+ *   NOW always wins; any label whose pixel box overlaps NOW's is suppressed.
+ *   Remaining labels are walked left-to-right; each is kept if its left
+ *   edge clears the previous label's right edge by ≥ 2% of tape width.
  */
 
 const TICK_COUNT = 40
@@ -69,73 +71,82 @@ function computeRange(currentMileage, markerMileages) {
   return { rangeStart: Math.max(0, start), rangeEnd: end }
 }
 
-// ─── Label collision helpers ──────────────────────────────────────────
+// ─── Pixel-edge label collision ───────────────────────────────────────
+// Reasons in rendered pixel space rather than t-space so that label text
+// widths are accounted for. A t-gap that looks safe can still produce
+// pixel collisions when labels are up to 110px wide.
+//
+// Tape labels row spans ~390px (≈430px mobile viewport − 2×20px margins).
+// Each character in the 9px monospace font is ~7px wide.
+
+const TAPE_WIDTH_PX = 390
+const CHAR_WIDTH_PX  = 7
+const LABEL_GAP_PCT  = 2    // minimum clear gap between adjacent label boxes (%)
 
 /**
- * Urgency for collision resolution.
- * Precise markers always beat approximate ones.
- * Within each tier: amber (warn) > neutral.
+ * Return a label box's { left, right } edges as % of tape width.
+ *
+ * line1 / line2 are the two stacked text strings; the wider one sets the
+ * column width. anchorOffset: 0 = left-anchored, 0.5 = center, 1.0 = right.
  */
-function markerUrgency(m) {
-  if (!m.approximate) return m.warn ? 3 : 2  // precise: amber=3, neutral=2
-  return m.warn ? 1 : 0                      // approx:  amber=1, neutral=0
+function labelBox(anchorPct, line1, line2, anchorOffset) {
+  const chars   = Math.max(line1.length, line2.length)
+  const widthPx = Math.min(110, chars * CHAR_WIDTH_PX)
+  const pct     = (widthPx / TAPE_WIDTH_PX) * 100
+  return {
+    left:  anchorPct - pct * anchorOffset,
+    right: anchorPct + pct * (1 - anchorOffset),
+  }
 }
 
 /**
- * Bidirectional collision resolver.
+ * Pixel-edge collision walk.
  *
- * NOW's position (tNow) is treated as an immovable anchor.
- * Markers to the RIGHT of NOW are walked left→right; if a new marker
- * is within tGap of the previous winner it is suppressed (unless it
- * outranks the previous winner, in which case the previous is evicted).
- * Markers to the LEFT of NOW are walked right→left by the same logic.
- * NOW always wins any collision — labels that land within tGap of tNow
- * are dropped regardless of their urgency.
+ * 1. Pre-pass: any service label whose pixel box overlaps NOW's box is
+ *    suppressed — NOW always wins.
+ * 2. Remaining candidates + NOW are walked left-to-right by left edge.
+ *    Each label is kept when its left edge clears the previous label's
+ *    right edge by ≥ LABEL_GAP_PCT; otherwise it is suppressed.
+ *    Ticks always render regardless of label suppression.
  *
- * Returns a Set of indices into `sorted` whose labels should be shown.
+ * Returns a Set of indices into `placed` whose labels should be shown.
  */
-function pickVisibleLabels(sorted, tGap, tNow) {
+function pickVisibleLabels(placed, nowBox) {
+  // Build per-service-label candidate records
+  const candidates = placed.map((m, i) => {
+    const anchorPct    = m.t * 100
+    const anchorOffset = m.t > 0.75 ? 1 : 0.5
+    const mileageStr   = (m.approximate ? '~' : '') + m.mileage.toLocaleString()
+    return { origIdx: i, box: labelBox(anchorPct, mileageStr, m.label, anchorOffset) }
+  })
+
+  // Step 1 — suppress labels whose pixel box conflicts with NOW's box
+  const nowConflicting = new Set(
+    candidates
+      .filter(c =>
+        c.box.left  < nowBox.right + LABEL_GAP_PCT &&
+        c.box.right > nowBox.left  - LABEL_GAP_PCT
+      )
+      .map(c => c.origIdx)
+  )
+
+  // Step 2 — left-to-right walk on remaining candidates + NOW
+  const walkers = [
+    { isNow: true, box: nowBox },
+    ...candidates
+      .filter(c => !nowConflicting.has(c.origIdx))
+      .map(c => ({ isNow: false, origIdx: c.origIdx, box: c.box })),
+  ].sort((a, b) => a.box.left - b.box.left)
+
   const visible = new Set()
+  let lastRight  = -Infinity
 
-  // Right of NOW, left → right
-  let lastT = tNow, lastIdx = -1   // lastIdx=-1 means NOW holds the slot
-  for (let i = 0; i < sorted.length; i++) {
-    if (sorted[i].t <= tNow) continue
-    const gap = sorted[i].t - lastT
-    if (gap < tGap) {
-      if (lastIdx < 0) continue  // NOW wins; skip this marker
-      if (markerUrgency(sorted[i]) > markerUrgency(sorted[lastIdx])) {
-        visible.delete(lastIdx)
-        visible.add(i)
-        lastT = sorted[i].t
-        lastIdx = i
-      }
-      // else: incoming marker loses; previous holds
-    } else {
-      visible.add(i)
-      lastT = sorted[i].t
-      lastIdx = i
+  for (const w of walkers) {
+    if (w.box.left >= lastRight + LABEL_GAP_PCT) {
+      if (!w.isNow) visible.add(w.origIdx)
+      lastRight = w.box.right
     }
-  }
-
-  // Left of NOW, right → left
-  lastT = tNow; lastIdx = -1
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    if (sorted[i].t >= tNow) continue
-    const gap = lastT - sorted[i].t
-    if (gap < tGap) {
-      if (lastIdx < 0) continue  // NOW wins; skip this marker
-      if (markerUrgency(sorted[i]) > markerUrgency(sorted[lastIdx])) {
-        visible.delete(lastIdx)
-        visible.add(i)
-        lastT = sorted[i].t
-        lastIdx = i
-      }
-    } else {
-      visible.add(i)
-      lastT = sorted[i].t
-      lastIdx = i
-    }
+    // else: overlaps previous kept label — suppressed
   }
 
   return visible
@@ -177,66 +188,19 @@ export default function MileageTape({
     }
   })
 
-  // Label collision — minimum gap: 1,500 mi absolute or 8% of span, whichever is larger
-  const tGap = Math.max(1_500 / totalSpan, 0.08)
-
-  // ── NOW exclusion pre-pass ────────────────────────────────────────────
-  // Any marker whose t-position is within tGap of tNow has its label
-  // suppressed unconditionally — NOW always wins. Their ticks still render.
-  // This runs BEFORE the general collision walk so excluded markers don't
-  // consume "slots" and can't pull distant markers into the cluster.
-  const nowExcluded = new Set(
-    placed.flatMap((m, i) => (Math.abs(m.t - tNow) < tGap ? [i] : []))
-  )
-
-  // ── General collision walk — non-excluded markers only ───────────────
-  // Filter to markers outside the NOW zone, run the existing bidirectional
-  // walk, then remap filtered indices back to placed indices.
-  const nonExcluded = placed
-    .map((m, i) => ({ m, origIdx: i }))
-    .filter(({ origIdx }) => !nowExcluded.has(origIdx))
-
-  const filteredVisible = pickVisibleLabels(
-    nonExcluded.map(({ m }) => m),
-    tGap,
-    tNow,
-  )
-
-  const visibleLabels = new Set(
-    [...filteredVisible].map((fi) => nonExcluded[fi].origIdx)
-  )
-
-  // ── DIAGNOSTIC — remove before ship ─────────────────────────────────
-  if (typeof window !== 'undefined') {
-    console.group('[MileageTape] render diagnostics')
-    console.log('range    rangeStart=%o  rangeEnd=%o  totalSpan=%o', rangeStart, rangeEnd, totalSpan)
-    console.log('tNow     %o  (nowAlign will be %o)',
-      tNow.toFixed(4),
-      tNow > 0.75 ? 'right' : tNow < 0.25 ? 'left' : 'center'
-    )
-    console.log('tGap     %o  (%o mi)', tGap.toFixed(4), (tGap * totalSpan).toFixed(0))
-    console.log('markers  (placed, sorted by t):')
-    placed.forEach((m, i) => {
-      const dist = Math.abs(m.t - tNow)
-      console.log(
-        '  [%d] %-30s mileage=%o  t=%o  |t-tNow|=%o  %s',
-        i,
-        m.label,
-        m.mileage,
-        m.t.toFixed(4),
-        dist.toFixed(4),
-        dist < tGap ? '← NOW-EXCLUDED' : visibleLabels.has(i) ? '← LABEL SHOWN' : '← label suppressed (collision)',
-      )
-    })
-    console.log('nowExcluded indices:', [...nowExcluded])
-    console.log('visibleLabels indices:', [...visibleLabels])
-    console.groupEnd()
-  }
-  // ── END DIAGNOSTIC ───────────────────────────────────────────────────
-
-  // Anchor direction for the NOW label
+  // Pixel-edge label collision — build NOW's box, then walk all candidates
   const nowAlign =
     tNow > 0.75 ? 'right' : tNow < 0.25 ? 'left' : 'center'
+  const nowAnchorOffset =
+    nowAlign === 'right' ? 1 : nowAlign === 'left' ? 0 : 0.5
+  const nowBox = labelBox(
+    tNow * 100,
+    currentMileage.toLocaleString(),
+    'NOW',
+    nowAnchorOffset,
+  )
+
+  const visibleLabels = pickVisibleLabels(placed, nowBox)
 
   return (
     <div
